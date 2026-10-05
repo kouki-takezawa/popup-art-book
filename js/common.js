@@ -15,7 +15,7 @@
 //       B.light(l)  作品専用の灯り(開いている間だけ点く)
 //       B.no      見開き番号
 //   caps          {キー: 字幕}
-//   tour          [{t0,t1,f:u=>[カメラ位置,注視点],cap,frame}] 右ページの座標で
+//   tour          [{t0,t1,f:u=>[カメラ位置,注視点],cap,frame,fov}] 右ページの座標で(fov はその場面だけの画角)
 //   tourEnd, tourLoop  巡回の終わりと、繰り返すときの戻り先(秒)
 let seed=1;function R(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646}
 function reseed(n){seed=n%2147483647||1}
@@ -77,6 +77,70 @@ function quad(a,b,c,d){const g=new THREE.BufferGeometry();g.setAttribute('positi
 function tri(a,b,c){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute([...a,...b,...c],3));g.setAttribute('uv',new THREE.Float32BufferAttribute([0,0,.5,1,1,0],2));g.computeVertexNormals();return g}
 function box(w,h,d,m){return shadowy(new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m))}
 const lam=(c,e=.25)=>new THREE.MeshLambertMaterial({color:c,emissive:new THREE.Color(c).multiplyScalar(e)});
+
+// ================= 作品で使い回す部品 =================
+// 立つカード(下端が y=0)。draw は単位座標(y 上向き)、x は 0..wu
+function cardMesh(wu,hu,draw,emi=.5,o){const t=tex(wu,hu,draw,o);const m=plane(wu,hu,mat(t,emi,true),t);m.position.y=hu/2;return m}
+// 十字差し(n 枚を中心で差し込んだカード)。木など、どこから見ても厚みがあるもの
+function crossCard(parent,wu,hu,draw,n=2,emi=.5,o){
+  const t=tex(wu,hu,draw,o),m0=mat(t,emi,true);
+  for(let i=0;i<n;i++){const m=plane(wu,hu,m0,t);m.position.y=hu/2;m.rotation.y=i*Math.PI/n;parent.add(m)}
+}
+// 点描(スーラなど)
+function dots(g,x,y,w,h,cols,n,r){for(let i=0;i<n;i++){g.fillStyle=pick(cols);g.beginPath();g.arc(x+R()*w,y+R()*h,r*(.6+R()*.7),0,7);g.fill()}}
+// やわらかな光の玉(加算合成のスプライト)
+function glowSprite(rgb='255,200,90',s=4){
+  const c=cv(256,256),g=c.getContext('2d'),rg=g.createRadialGradient(128,128,0,128,128,128);
+  rg.addColorStop(0,`rgba(${rgb},1)`);rg.addColorStop(.25,`rgba(${rgb},.5)`);rg.addColorStop(1,`rgba(${rgb},0)`);g.fillStyle=rg;g.fillRect(0,0,256,256);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,fog:false}));sp.scale.set(s,s,1);return sp;
+}
+// 紙の支柱(宙に浮く部品を背景板や地面につなぐ細い紙の帯)
+const TAB_M=new THREE.MeshLambertMaterial({color:0xe6dcc0,emissive:0x3a3428});
+function tab(parent,a,b,w=.12){
+  const A=V(...a),d=V(...b).sub(A),m=new THREE.Mesh(new THREE.BoxGeometry(w,w,d.length()),TAB_M);
+  m.position.copy(A.addScaledVector(d,.5));m.quaternion.setFromUnitVectors(V(0,0,1),d.clone().normalize());m.castShadow=true;parent.add(m);return m;
+}
+// 背景板: 奥に立つ円筒の一部(中心 z=cz、半径 rad、高さ h、左右の開き角 th)。手前に倒して畳む。
+//   内側 = 絵 draw(g,W,H)(2048 x 1400 画素、y 下向き、左右はそのまま描けばよい)
+//   外側 = 倒すと上に来る面なので題名を180度回して刷る。edge(g,W,H) で上辺の切り抜きを変えられる
+//   shadow:false で、手前に浮かせた部品の影を板に落とさない(星や雲)
+// 戻り値 {pg, zAt(x)}  zAt は板の内側の面の z
+function backdrop(B,o){
+  const RAD=o.rad??34,CZ=o.cz??6.2,HH=o.h??24,TH=o.th??.56,W=2048,H=1400;
+  const pg=B.pop(B.root,[0,0,0],[0,1],o.delay??1.15,o.dur??1.3,o.layer??6);
+  const edge=new Path2D();
+  if(o.edge)o.edge(edge,W,H);else{edge.moveTo(0,H);edge.lineTo(W,H);edge.lineTo(W,120);for(let x=W;x>0;x-=128)edge.quadraticCurveTo(x-64,R()*90-20,x-128,60+R()*70);edge.closePath()}
+  const c=cv(W,H),g=c.getContext('2d');
+  // 円筒の内側から見ると左右が逆になるので、鏡に映して描く
+  g.save();g.clip(edge);g.translate(W,0);g.scale(-1,1);o.draw(g,W,H);g.restore();
+  g.strokeStyle=PAPER;g.lineWidth=10;g.stroke(edge);
+  const st=new THREE.CanvasTexture(c);st.anisotropy=ANISO;
+  const lc=cv(W,H),lg=lc.getContext('2d');
+  lg.save();lg.clip(edge);lg.fillStyle='#ece1c4';lg.fillRect(0,0,W,H);
+  brush(lg,0,0,W,H,['#e3d5b2','#f3ead2','#e8dbbb'],1800,30,3,0,{alpha:.5,jit:3});
+  lg.translate(W/2,760);lg.rotate(Math.PI);
+  lg.strokeStyle='#b08a3a';lg.lineWidth=4;lg.strokeRect(-860,-430,1720,860);lg.lineWidth=1.5;lg.strokeRect(-840,-410,1680,820);
+  lg.textAlign='center';lg.fillStyle='#8a6a2a';lg.font=`52px ${FONT}`;lg.fillText(`第 ${B.no} 話`,0,-200);
+  lg.fillStyle='#2b2216';lg.font=`${o.titleSize||150}px ${FONT}`;lg.fillText(o.title,0,0);
+  lg.fillStyle='#6a5a3e';lg.font='italic 58px Georgia,serif';lg.fillText(o.orig,0,110);
+  lg.fillStyle='#8a6a2a';lg.font=`46px ${FONT}`;lg.fillText(o.sub||'―　タップすると、絵が立ち上がります　―',0,280);
+  for(const x of [-560,560]){lg.fillStyle=o.dot||'#e9b830';lg.beginPath();lg.arc(x,-215,26,0,7);lg.fill();lg.strokeStyle='#b08a3a';lg.lineWidth=3;lg.beginPath();lg.arc(x,-215,42,0,7);lg.stroke()}
+  lg.restore();lg.strokeStyle=PAPER;lg.lineWidth=10;lg.stroke(edge);
+  const lt=new THREE.CanvasTexture(lc);lt.anisotropy=ANISO;
+  const geo=new THREE.CylinderGeometry(RAD,RAD,HH,48,1,true,Math.PI-TH,TH*2);
+  const sky=new THREE.Mesh(geo,mat(st,o.emi??.62,true));sky.material.side=THREE.BackSide;sky.position.set(0,HH/2,CZ);shadowy(sky,st,true);sky.castShadow=false;if(o.shadow===false)sky.receiveShadow=false;pg.add(sky);
+  const lab=new THREE.Mesh(geo,mat(lt,.3,true));lab.material.side=THREE.FrontSide;lab.position.copy(sky.position);lab.receiveShadow=true;pg.add(lab);
+  return {pg,zAt:x=>CZ-Math.sqrt(RAD*RAD-x*x),RAD,CZ,HH};
+}
+// 立ち上がる向き: 高さ h の部品が z に立つとき、畳んでもページからはみ出さない側へ倒す
+const fdir=(z,h)=>z-h>=-27.5?[0,-1]:[0,1];
+// 地面の内側の枠(ページの縁を少し残して塗る)
+function groundClip(g,X,Z,m,fn){g.save();g.beginPath();g.rect(X(-18+m),Z(-28+m),X(18-m)-X(-18+m),Z(28-m)-Z(-28+m));g.clip();fn();g.restore()}
+function groundTitle(g,W,H,jp,orig){
+  g.fillStyle='#5a4a32';g.textAlign='center';
+  g.font='30px '+FONT;g.fillText(jp,W/2,H-17);
+  g.font='italic 28px Georgia,serif';g.fillText(orig,W/2,38);
+}
 
 // 紙の地とのど(綴じ目側の影)
 function paperBase(g,W,H){

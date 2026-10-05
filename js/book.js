@@ -2,7 +2,8 @@
 // 見開き N 枚 = 固定の左ページ(見開き1の左) + めくれる紙 N-1 枚 + 固定の右ページ(見開きNの右)。
 // めくれる紙 k の表 = 見開き k の右ページ、裏 = 見開き k+1 の左ページ(k は 0 始まり)。
 const N=10;
-function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.fov=camera.aspect<1?70:50;camera.updateProjectionMatrix()}
+const baseFov=()=>camera.aspect<1?70:50;
+function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.fov=baseFov();camera.updateProjectionMatrix()}
 addEventListener('resize',resize);resize();
 
 scene.add(new THREE.AmbientLight(0x8090c0,.38));
@@ -132,7 +133,7 @@ function tourPose(w,t){
 }
 // 真上から見開き全体
 function topPose(){
-  const f=Math.tan(camera.fov*Math.PI/360)*2,h=Math.max(DP*1.3/f,(2*WP+3)*1.12/(f*camera.aspect));
+  const f=Math.tan(baseFov()*Math.PI/360)*2,h=Math.max(DP*1.3/f,(2*WP+3)*1.12/(f*camera.aspect));
   return {p:V(0,h,.6),l:V(0,0,0)};
 }
 
@@ -217,6 +218,9 @@ function tick(now){
   if(b){applyPops(b,pc+1);b.tick&&b.tick(T,dt)}
   if(tw){tw.t+=dt;const k=easeIO(tw.t/tw.dur);pose={p:tw.fp.clone().lerp(tw.tp,k),l:tw.fl.clone().lerp(tw.tl,k)};if(tw.t>=tw.dur)tw=null}
   if(pose){camera.position.copy(pose.p);camLook.copy(pose.l)}
+  // 場面ごとの画角(額縁の場面で絵を画面いっぱいに)。縦長の画面では広めに
+  const fovT=phase==='tour'&&shot&&shot.s.fov?shot.s.fov*(camera.aspect<1?1.45:1):baseFov();
+  if(Math.abs(camera.fov-fovT)>.01){camera.fov+=(fovT-camera.fov)*(paused?1:Math.min(1,dt*1.6));camera.updateProjectionMatrix()}
   camera.lookAt(camLook);
   if(phase==='tour')setCap(tau>1.5?shot.s.cap||null:null);
   const fr=phase==='tour'&&shot&&shot.s.frame&&shot.u>.12&&shot.u<.94;
