@@ -14,7 +14,10 @@ canvas#c{display:block;width:100vw;height:100vh}
 #title b{display:block;font-size:20px;font-weight:400;letter-spacing:.3em;margin-top:4px}
 button{font:inherit;color:var(--paper);background:rgba(20,22,40,.6);border:1px solid rgba(241,231,207,.4);cursor:pointer;border-radius:2px}
 button:disabled{opacity:.3;cursor:default}
-#pause{position:fixed;top:16px;right:20px;font-size:12px;letter-spacing:.15em;padding:7px 14px}
+#tools{position:fixed;top:16px;right:20px;display:flex;gap:8px}
+#tools button{font-size:12px;letter-spacing:.15em;padding:7px 14px}
+#back{position:fixed;top:62px;right:20px;font-size:12px;letter-spacing:.15em;padding:7px 14px;display:none}
+#tap{left:50%;top:18px;transform:translateX(-50%);font-size:14px;letter-spacing:.2em;background:rgba(20,16,10,.55);padding:8px 18px;border-radius:2px;transition:opacity .8s;white-space:nowrap}
 #nav{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:14px;white-space:nowrap}
 #nav button{width:40px;height:34px;font-size:15px}
 #pg{font-size:13px;letter-spacing:.18em;min-width:12em;text-align:center;text-shadow:0 1px 6px rgba(0,0,0,.8)}
@@ -30,8 +33,10 @@ button:disabled{opacity:.3;cursor:default}
 <body>
 <canvas id="c"></canvas>
 <div class="hud" id="title">絵画の街をあるく絵本<b>夜のカフェテラス</b></div>
-<div class="hud" id="hint">◀ ▶ でページをめくります</div>
-<button id="pause">❚❚ 一時停止</button>
+<div class="hud" id="hint">◀ ▶ でページをめくる　左のページをタップで解説を読み上げ</div>
+<div id="tools"><button id="narr">🔊 ナレーション</button><button id="pause">❚❚ 一時停止</button></div>
+<button id="back">本にもどる</button>
+<div class="hud" id="tap">右の絵をタップすると、街が立ち上がります</div>
 <div class="hud" id="cap"></div>
 <div id="frame"></div>
 <div id="plate">フィンセント・ファン・ゴッホ《夜のカフェテラス》1888年<br>この場所から見た構図で描かれた</div>
@@ -523,59 +528,104 @@ bendLeaf(0);
 // ================= 状態 =================
 const SPREADS=[{name:'夜のカフェテラス',art:true},{name:'白紙'}];
 const CAP={
+  A:'第1話、夜のカフェテラス。フィンセント・ファン・ゴッホ、1888年。',
   B:'1888年9月、南フランスのアルル。ゴッホはフォーラム広場のこのカフェを、夜、その場で描いた。',
   C:'黄色いガス灯の光と、夜空の青。黄と青は補色どうしで、並べると互いをいちばん鮮やかに見せる。',
   D:'妹ヴィルへの手紙に、ゴッホは「これは黒を一切使わない夜の絵だ」と書いている。',
   E:'星を白い点ではなく、光の花として描いた。ゴッホが星空を描いた最初の作品とされる。',
   F:'このカフェは今もアルルのフォーラム広場にあり、「カフェ・ヴァン・ゴッホ」として営業している。'
 };
-// カメラ台本(右ページの座標。x=-36 が左ページの中心)
+const DESC_SPEECH='夜のカフェテラス。フィンセント・ファン・ゴッホ、1888年9月。'+
+  '1888年、ゴッホは南フランスのアルルに移り住んだ。九月のある夜、彼はフォーラム広場に画架を立て、ガス灯に照らされたカフェのテラスを、その場で描いた。'+
+  '夜を描くのに、黒はほとんど使っていない。妹ヴィルへの手紙には、「これは黒を一切使わない夜の絵だ」とある。夜空の深い青と、ガス灯の黄。補色どうしを並べて、光そのものを描こうとした。'+
+  '星を光の花のように描いたのも、この絵が最初とされる。翌年、彼は星月夜を描くことになる。';
+// カメラ台本(右ページの座標)
 const TOUR=[
-  {t0:0,t1:6,f:u=>{const k=easeIO(u);return [V(-18,70-8*k,64-8*k),V(-18,0,-4)]}},
+  {t0:0,t1:6,f:u=>{const k=easeIO(u);return [V(0,40-6*k,46-6*k),V(0,2,-6)]},cap:'A'},
   {t0:6,t1:14.5,f:u=>{const a=.95-1.9*easeIO(u);return [V(Math.sin(a)*46,24-6*u,Math.cos(a)*46-6),V(0,4,-8)]},cap:'B'},
   {t0:14.5,t1:21.5,f:u=>{const k=easeIO(u);return [V(2.8-.4*k,3.6-2*k,27-18*k),V(-.4-1.1*k,3.6+.9*k,-18)]},cap:'C'},
   {t0:21.5,t1:28.5,f:u=>[V(2.4,1.6,9-.8*u),V(-1.5,4.5,-18)],cap:'D',frame:true},
   {t0:28.5,t1:35.5,f:u=>{const k=easeIO(u);return [V(.5+2.5*k,2+11*k,-1-7*k),V(-4.5+4.5*k,2.6+15*k,-11-16*k)]},cap:'E'},
-  {t0:35.5,t1:42,f:u=>{const k=easeIO(u);return [V(3-21*k,13+49*k,-8+64*k),V(-18*k,3-3*k,-6+2*k)]},cap:'F'},
+  {t0:35.5,t1:42,f:u=>{const k=easeIO(u);return [V(3-3*k,13+21*k,-8+48*k),V(0,3-k,-6)]},cap:'F'},
 ];
 const TOUR_END=42,TOUR_LOOP=6,BL=1.6;
-function tourPose(tau){
-  if(tau>=TOUR_END)tau=TOUR_LOOP+(tau-TOUR_LOOP)%(TOUR_END-TOUR_LOOP);
-  let i=TOUR.findIndex(s=>tau<s.t1);if(i<0)i=TOUR.length-1;const s=TOUR[i];
-  let [p,l]=s.f(clamp((tau-s.t0)/(s.t1-s.t0),0,1));
-  if(i>0&&tau-s.t0<BL){const [pp,pl]=TOUR[i-1].f(1),k=easeIO((tau-s.t0)/BL);p=pp.lerp(p,k);l=pl.lerp(l,k)}
+function wrapTau(t){return t>=TOUR_END?TOUR_LOOP+(t-TOUR_LOOP)%(TOUR_END-TOUR_LOOP):t}
+function tourPose(t){
+  t=wrapTau(t);
+  let i=TOUR.findIndex(s=>t<s.t1);if(i<0)i=TOUR.length-1;const s=TOUR[i];
+  let [p,l]=s.f(clamp((t-s.t0)/(s.t1-s.t0),0,1));
+  if(i>0&&t-s.t0<BL){const [pp,pl]=TOUR[i-1].f(1),k=easeIO((t-s.t0)/BL);p=pp.lerp(p,k);l=pl.lerp(l,k)}
   pageG[1].updateMatrixWorld(true);
-  return {p:pageG[1].localToWorld(p),l:pageG[1].localToWorld(l),s,u:(tau-s.t0)/(s.t1-s.t0)};
+  return {p:pageG[1].localToWorld(p),l:pageG[1].localToWorld(l),s,u:(t-s.t0)/(s.t1-s.t0)};
 }
-const OVER={p:V(0,44,40),l:V(0,0,-1)};
-function blankPose(tau){return {p:V(Math.sin(tau*.12)*6,40,36+Math.cos(tau*.12)*3),l:V(0,0,-1)}}
+// 真上から見開き全体
+function topPose(){
+  const f=Math.tan(camera.fov*Math.PI/360)*2,h=Math.max(DP*1.3/f,(2*WP+3)*1.12/(f*camera.aspect));
+  return {p:V(0,h,.6),l:V(0,0,0)};
+}
 
-let active=0,target=0,phase='tour',tau=0,pc=0,flipT=0,paused=false,T=0;
-let camFrom={p:OVER.p.clone(),l:OVER.l.clone()},tw=null;
-const camLook=OVER.l.clone();
-camera.position.copy(OVER.p);camera.lookAt(camLook);
+// ---- ナレーション(ブラウザの音声合成) ----
+const synth=window.speechSynthesis||null;let narrOn=!!synth,voice=null,speakingKey=null;
+function pickVoice(){if(!synth)return;const vs=synth.getVoices().filter(v=>/^ja/i.test(v.lang));
+  voice=vs.find(v=>/Nanami|Kyoko|O-ren|Google|Haruka|Ayumi|Sayaka/i.test(v.name))||vs[0]||null}
+if(synth){pickVoice();synth.onvoiceschanged=pickVoice}
+function speak(text,key){
+  if(!synth||!narrOn)return;synth.cancel();
+  const u=new SpeechSynthesisUtterance(text);u.lang='ja-JP';if(voice)u.voice=voice;u.rate=1.02;u.pitch=1;
+  speakingKey=key;u.onend=u.onerror=()=>{if(speakingKey===key)speakingKey=null};synth.speak(u);
+}
+function hush(){if(synth)synth.cancel();speakingKey=null}
+
+// phase: top(真上・平ら) / tour(立ち上がって巡回) / fold(畳んで真上へ) / flip(めくる)
+let active=0,target=0,phase='top',tau=0,pc=0,flipT=0,paused=false,T=0,afterFold=null,holdT=0;
+let camFrom=null,tw=null;
+const camLook=V(0,0,0);
+{const t=topPose();camera.position.copy(t.p);camLook.copy(t.l);camera.lookAt(camLook)}
 const $=id=>document.getElementById(id);
 function updateNav(){
   $('pg').textContent=`見開き ${target+1} / ${SPREADS.length}　${SPREADS[target].name}`;
   $('prev').disabled=target<=0;$('next').disabled=target>=SPREADS.length-1;
   $('title').querySelector('b').textContent=SPREADS[target].art?SPREADS[target].name:'　';
 }
-function request(i){
-  if(i<0||i>=SPREADS.length||i===active||phase!=='tour')return;
-  target=i;phase='fold';updateNav();
-  tw={fp:camera.position.clone(),fl:camLook.clone(),tp:OVER.p.clone(),tl:OVER.l.clone(),t:0,dur:1.8};
+function updateUI(){
+  $('back').style.display=phase==='tour'?'block':'none';
+  $('tap').style.opacity=phase==='top'&&SPREADS[active].art?1:0;
 }
+function tweenTo(pose,dur){tw={fp:camera.position.clone(),fl:camLook.clone(),tp:pose.p,tl:pose.l,t:0,dur}}
+function foldThen(next){hush();setCap(null,true);phase='fold';afterFold=next;tweenTo(topPose(),2);updateUI()}
+function request(i){
+  if(i<0||i>=SPREADS.length||i===active||(phase!=='top'&&phase!=='tour'))return;
+  target=i;updateNav();
+  const go=()=>{phase='flip';flipT=0;updateUI()};
+  if(phase==='tour')foldThen(go);else{hush();go()}
+}
+function rise(){if(phase!=='top'||!SPREADS[active].art)return;hush();phase='tour';tau=0;camFrom={p:camera.position.clone(),l:camLook.clone()};updateUI()}
 $('prev').onclick=()=>request(active-1);$('next').onclick=()=>request(active+1);
+$('back').onclick=()=>{if(phase==='tour')foldThen(()=>{phase='top';updateUI()})};
 addEventListener('keydown',e=>{if(e.key==='ArrowRight')request(active+1);if(e.key==='ArrowLeft')request(active-1)});
-$('pause').onclick=e=>{paused=!paused;e.target.textContent=paused?'▶ 再生':'❚❚ 一時停止'};
+$('pause').onclick=e=>{paused=!paused;e.target.textContent=paused?'▶ 再生':'❚❚ 一時停止';if(synth){paused?synth.pause():synth.resume()}};
+$('narr').onclick=e=>{narrOn=!narrOn;e.target.textContent=narrOn?'🔊 ナレーション':'🔇 ナレーション';if(!narrOn)hush();else if(capNow)speak(CAP[capNow],capNow)};
+if(!synth)$('narr').style.display='none';
+// タップ: 右ページの絵 → 立ち上がる / 左ページ → 解説を読み上げ
+const ray=new THREE.Raycaster(),ndc=new THREE.Vector2(),hitP=new THREE.Vector3();
+let down=null;
+renderer.domElement.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
+renderer.domElement.addEventListener('pointerup',e=>{
+  if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>8||phase!=='top')return;
+  ndc.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);ray.setFromCamera(ndc,camera);
+  if(!ray.ray.intersectPlane(new THREE.Plane(V(0,1,0),-.05),hitP))return;
+  if(Math.abs(hitP.x)>WP||Math.abs(hitP.z)>DP/2||!SPREADS[active].art)return;
+  if(hitP.x>0)rise();
+  else if(speakingKey==='desc')hush();else speak(DESC_SPEECH,'desc');
+});
 
 const capEl=$('cap');let capNow=null;
-function setCap(k){if(k===capNow)return;capNow=k;if(k){capEl.textContent=CAP[k];capEl.style.opacity=1}else capEl.style.opacity=0}
+function setCap(k,silent){if(k===capNow)return;capNow=k;if(k){capEl.textContent=CAP[k];capEl.style.opacity=1;if(!silent)speak(CAP[k],k)}else capEl.style.opacity=0}
 const tmpV=new THREE.Vector3();
 function setArt(p){ // 右ページの飛び出し具合 p: 0..3.9
-  const vis=p>0.001;root.visible=vis;
-  applyPops(vis?p+1.3:0);
-  const op=1-clamp(p/.9,0,1);printM.opacity=imgM.opacity=op;printMesh.visible=imgMesh.visible=op>0.001;
+  const vis=p>.45;root.visible=vis; // 挿絵が消えてから部品が起き上がる
+  applyPops(vis?p+1.15:0);
+  const op=1-clamp(p/.45,0,1);printM.opacity=imgM.opacity=op;printMesh.visible=imgMesh.visible=op>0.001;
 }
 // 平らなときの挿絵を、画家の視点から撮っておく
 function snapshot(){
@@ -588,46 +638,49 @@ function snapshot(){
   setArt(0);
 }
 snapshot();
-updateNav();
+updateNav();updateUI();
+addEventListener('resize',()=>{if(phase==='top'&&!tw){const t=topPose();camera.position.copy(t.p);camLook.copy(t.l)}});
 
 let last=performance.now();
 function tick(now){
   let dt=Math.min(.05,(now-last)/1000);last=now;if(paused)dt=0;T+=dt;
+  let pose=null,shot=null;
   if(phase==='tour'){
-    if(SPREADS[active].art)pc=Math.min(3.9,pc+dt);
-    tau+=dt;
+    pc=Math.min(4.3,pc+dt);
+    // ナレーションを読み終えるまで、その場面の終わりで待つ
+    const cur=tourPose(tau);
+    const hold=narrOn&&speakingKey&&speakingKey===cur.s.cap&&cur.u>.97&&holdT<12;
+    if(hold)holdT+=dt;else{holdT=0;tau+=dt}
+    shot=tourPose(tau);pose=shot;
+    if(tau<3){const k=easeIO(tau/3);pose={p:camFrom.p.clone().lerp(pose.p,k),l:camFrom.l.clone().lerp(pose.l,k)}}
   }else if(phase==='fold'){
     pc=Math.max(0,pc-dt*2.4);
-    if(pc<=0&&!tw){phase='flip';flipT=0}
+    if(pc<=0&&!tw){const f=afterFold;afterFold=null;f&&f()}
   }else if(phase==='flip'){
     flipT+=dt/2.4;const k=easeIO(flipT),fwd=target>active;
     bendLeaf(Math.PI*(fwd?k:1-k));
-    if(flipT>=1){leafRigid.rotation.z=target>0?Math.PI:0;bendLeaf(leafRigid.rotation.z);startTour()}
+    if(flipT>=1){leafRigid.rotation.z=target>0?Math.PI:0;bendLeaf(leafRigid.rotation.z);active=target;phase='top';updateUI()}
   }
   setArt(pc);
   for(const s of stars)s.rotation.z=Math.sin(T*.3+s.userData.ph)*.3+T*s.userData.sp*.2;
   lantern.getWorldPosition(tmpV);lampL.position.copy(tmpV);
   lampL.intensity=root.visible?lampOn*(1.8+.08*Math.sin(T*7)+.05*Math.sin(T*13)):0;
-  let pose,shot=null;
-  if(phase==='tour'){
-    if(SPREADS[active].art){const r=tourPose(tau);pose=r;shot=r}else pose=blankPose(tau);
-    if(tau<3){const k=easeIO(tau/3);pose={p:camFrom.p.clone().lerp(pose.p,k),l:camFrom.l.clone().lerp(pose.l,k)}}
-  }
   if(tw){tw.t+=dt;const k=easeIO(tw.t/tw.dur);pose={p:tw.fp.clone().lerp(tw.tp,k),l:tw.fl.clone().lerp(tw.tl,k)};if(tw.t>=tw.dur)tw=null}
   if(pose){camera.position.copy(pose.p);camLook.copy(pose.l)}
   camera.lookAt(camLook);
-  setCap(phase==='tour'&&shot&&tau>2?shot.s.cap||null:null);
-  const fr=phase==='tour'&&shot&&shot.s.frame&&shot.u>.12&&shot.u<.94;
+  if(phase==='tour')setCap(tau>1.5?shot.s.cap||null:null);
+  const fr=phase==='tour'&&shot&&shot.s.frame&&shot.u>.12;
   $('frame').style.opacity=fr?1:0;$('plate').style.opacity=fr?1:0;
   renderer.render(scene,camera);
   requestAnimationFrame(tick);
 }
-function startTour(){active=target;phase='tour';tau=0;camFrom={p:camera.position.clone(),l:camLook.clone()}}
 // 確認用: ?t=秒 ツアーのその時点で停止 / ?spread=2 / ?flip=0..1 めくり途中で停止
 const qs=new URLSearchParams(location.search);
-if(qs.has('spread')){active=target=+qs.get('spread')-1;leafRigid.rotation.z=active>0?Math.PI:0;bendLeaf(leafRigid.rotation.z);updateNav()}
-if(qs.has('flip')){phase='flip';target=1;active=0;flipT=+qs.get('flip');paused=true;bendLeaf(Math.PI*easeIO(flipT));camera.position.copy(OVER.p);camLook.copy(OVER.l)}
-if(qs.has('t')){tau=+qs.get('t');pc=3.9;camFrom={p:OVER.p.clone(),l:OVER.l.clone()};paused=true;setArt(pc)}
+if(qs.has('spread')){active=target=+qs.get('spread')-1;leafRigid.rotation.z=active>0?Math.PI:0;bendLeaf(leafRigid.rotation.z);updateNav();updateUI()}
+if(qs.has('flip')){phase='flip';target=1;active=0;flipT=+qs.get('flip');paused=true;bendLeaf(Math.PI*easeIO(flipT))}
+if(qs.get('auto')==='rise')setTimeout(rise,300);
+if(qs.get('auto')==='back')setTimeout(()=>{rise();setTimeout(()=>$('back').click(),2500)},300);
+if(qs.has('t')){phase='tour';narrOn=false;tau=+qs.get('t');pc=3.9;camFrom=topPose();paused=true;setArt(pc);updateUI()}
 requestAnimationFrame(tick);
 </script>
 </body>
