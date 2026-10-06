@@ -271,9 +271,11 @@ function popAngle(q,open){
   if(open>=HALF-1e-6||q.r<=0)return Infinity;
   return Math.asin(Math.min(1,.9*Math.tan(Math.max(0,open))/q.r));
 }
+// 畳んだ部品の傾き(高さ 30 でも 0.015)は、重なり順の段差(layer ごとに 0.03)より小さくする。大きいと奥の部品の先が上の段を突き抜けて透けて見える
 function setPop(q){
-  const a=Math.max(.004,q.a),c=Math.cos(a),s=Math.max(.006,Math.sin(a)),lift=q.layer*.03*Math.max(0,1-a/HALF);
-  q.g.matrix.set(1,c*q.dx,0,q.p[0], 0,s,0,q.p[1]+.012+lift, 0,c*q.dz,1,q.p[2], 0,0,0,1);
+  const a=Math.max(5e-4,q.a),c=Math.cos(a),s=Math.max(5e-4,Math.sin(a)),lift=q.layer*.03*Math.max(0,1-a/HALF);
+  // 台の上に立つ部品(p[1]>0)は、台と一緒に畳まれるよう、寝かせるときに高さも下ろす(7°ほど起きれば元の高さ)
+  q.g.matrix.set(1,c*q.dx,0,q.p[0], 0,s,0,q.p[1]*Math.min(1,s*8)+.012+lift, 0,c*q.dz,1,q.p[2], 0,0,0,1);
   q.g.matrixWorldNeedsUpdate=true;
 }
 // 立ち上げ具合で決まる角度(少し行き過ぎて戻る)と、開き角で決まる上限の小さいほう
