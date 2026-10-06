@@ -16,8 +16,12 @@ body>*{transition:opacity .9s}
   phase='op';   // tapAction / request は phase が top でないと動かない。boot も先読みをしない
   const ease=k=>easeIO(clamp(k,0,1)),seg=(t,a,b)=>clamp((t-a)/(b-a),0,1);
   let t0=null,done=false;
+  // ?only(OP だけ見る): 終わっても UI は出さず、操作も止めたまま。mock/index.html に終わったことを知らせる
+  const ONLY=qs.has('only');
   function finish(){
-    done=true;phase='top';
+    done=true;
+    if(ONLY){parent.postMessage('op-done','*');return}
+    phase='top';
     block.remove();removeEventListener('keydown',keyBlock,true);
     document.documentElement.classList.remove('op');
     updateNav();updateUI();prebuild();invalidate();
