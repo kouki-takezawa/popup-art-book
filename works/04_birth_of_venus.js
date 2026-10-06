@@ -185,7 +185,7 @@ const sun=B.light(new THREE.PointLight(0xfff8ec,0,70,1));
 const at=new THREE.Object3D();at.position.set(-8,22,16);root.add(at);
 let k=0;B.extra(2.5,1,e=>k=clamp(e,0,1));
 const tmp=new THREE.Vector3();
-return {tick(T){
+return {liveShadows:true,tick(T){
   at.getWorldPosition(tmp);sun.position.copy(tmp);sun.intensity=.2*k;
   for(const q of roses)q.r.rotation.z=q.ph+Math.sin(T*.6+q.ph)*.5;
 }};

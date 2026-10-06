@@ -306,7 +306,7 @@ piece(3.6,9.3,0,[0,1],pg=>{const m=cardMesh(1.1,1.95,(g)=>{
   cut(g,g=>{g.moveTo(.2,1);g.lineTo(.45,1);g.lineTo(.45,1.55);g.lineTo(.2,1.7);g.closePath()},'#f2c230',CAFE,20,.1,.04,1.2,[.2,1,.3,.7]);
 },.55);m.rotation.y=Math.PI;pg.add(m)});
 const tmpV=new THREE.Vector3();
-return {tick(T){
+return {liveShadows:true,tick(T){
   for(const s of stars)s.rotation.z=Math.sin(T*.3+s.userData.ph)*.3+T*s.userData.sp*.2;
   lantern.getWorldPosition(tmpV);lampL.position.copy(tmpV);
   lampL.intensity=lampOn*(1.8+.08*Math.sin(T*7)+.05*Math.sin(T*13));

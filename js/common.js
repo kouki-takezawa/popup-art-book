@@ -17,6 +17,9 @@
 //   caps          {キー: 字幕}
 //   tour          [{t0,t1,f:u=>[カメラ位置,注視点],cap,frame,fov}] 右ページの座標で(fov はその場面だけの画角)
 //   tourEnd, tourLoop  巡回の終わりと、繰り返すときの戻り先(秒)
+//   build の戻り値に liveShadows:true を付けると、tick で動く部品の影を開いている間も更新する(星や雲など影を落とす部品を動かす作品)
+//
+// 作品を足すときは、下の BOOK.list にも1行足す(目次とページ送りの題名は、作品ファイルを読む前にここから出す)
 let seed=1;function R(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646}
 function reseed(n){seed=n%2147483647||1}
 const pick=a=>a[R()*a.length|0];
@@ -55,9 +58,10 @@ function wrapText(g,text,x,y,maxW,lh){
 }
 
 // ================= three =================
-const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true,preserveDrawingBuffer:true});
+const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true});
 renderer.setPixelRatio(Math.min(2,devicePixelRatio));
-renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+// 影は部品が動くときだけ計算し直す(js/book.js で shadowMap.needsUpdate を立てる)
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;
 const ANISO=renderer.capabilities.getMaxAnisotropy();
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x0a090e);
 scene.fog=new THREE.Fog(0x0a090e,90,220);
@@ -154,4 +158,17 @@ function gutter(g,W,H,spineLeft){
   gr.addColorStop(0,'rgba(60,40,20,0)');gr.addColorStop(1,'rgba(60,40,20,.4)');g.fillStyle=gr;g.fillRect(spineLeft?0:W-gw,0,gw,H);
 }
 
-const BOOK={works:{},add(w){this.works[w.no]=w}};
+const BOOK={works:{},add(w){this.works[w.no]=w},
+  // 見開きの順に、作品ファイル名・題名・画家
+  list:[
+    {file:'01_grande_jatte',name:'グランド・ジャット島の日曜日の午後',artist:'ジョルジュ・スーラ　1884〜1886年'},
+    {file:'02_moulin_galette',name:'ムーラン・ド・ラ・ギャレットの舞踏会',artist:'ピエール＝オーギュスト・ルノワール　1876年'},
+    {file:'03_japanese_bridge',name:'睡蓮の池と日本の橋',artist:'クロード・モネ　1899年'},
+    {file:'04_birth_of_venus',name:'ヴィーナスの誕生',artist:'サンドロ・ボッティチェリ　1485年頃'},
+    {file:'05_babel',name:'バベルの塔',artist:'ピーテル・ブリューゲル（父）　1563年'},
+    {file:'06_the_dream',name:'夢',artist:'アンリ・ルソー　1910年'},
+    {file:'07_cafe_terrace',name:'夜のカフェテラス',artist:'フィンセント・ファン・ゴッホ　1888年9月'},
+    {file:'08_starry_night',name:'星月夜',artist:'フィンセント・ファン・ゴッホ　1889年6月'},
+    {file:'09_nighthawks',name:'ナイトホークス',artist:'エドワード・ホッパー　1942年'},
+    {file:'10_empire_of_light',name:'光の帝国',artist:'ルネ・マグリット　1954年'},
+  ]};

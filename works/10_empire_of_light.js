@@ -100,7 +100,7 @@ let glow,lampK=0;
 }
 const lamp=B.light(new THREE.PointLight(0xffd090,0,26,1.2));
 const tmp=new THREE.Vector3();
-return {tick(T){
+return {liveShadows:true,tick(T){
   lampAt.getWorldPosition(tmp);lamp.position.copy(tmp);lamp.intensity=lampK*(1.9+.04*Math.sin(T*9));
   wl.userData.at.getWorldPosition(tmp);wl.position.copy(tmp);wl.intensity=lampK*1.2;
   for(const c of clouds)c.m.position.x=c.x+Math.sin(T*.08+c.ph)*.5;

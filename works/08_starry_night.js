@@ -133,7 +133,7 @@ const glow=B.light(new THREE.PointLight(0xc8d8ff,0,80,1));
 const at=new THREE.Object3D();at.position.set(2,24,4);root.add(at);
 let k=0;B.extra(2.5,1,e=>k=clamp(e,0,1));
 const tmp=new THREE.Vector3();
-return {tick(T){
+return {liveShadows:true,tick(T){
   at.getWorldPosition(tmp);glow.position.copy(tmp);glow.intensity=.45*k;
   for(const s of stars)s.rotation.z=s.userData.swirl?-T*.12+s.userData.ph:Math.sin(T*.4+s.userData.ph)*.3;
 }};
