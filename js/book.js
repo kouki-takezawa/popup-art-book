@@ -257,40 +257,43 @@ function loadWork(i){
   }));
 }
 
-// ================= 飛び出し(ページの開き具合に合わせて立ち上がる) =================
-// 群ごとに「高さ / のどからの距離」の最大(r)を求めておき、相手のページ(開き角 open)に当たらない角度まで立てる。
-// 閉じるときはすぐに畳み、開くときは少し遅れて(1秒に POP_RATE ラジアンまで)立ち上がる。extra は大きく開いてから動く。
+// ================= 飛び出し(タップで立ち上がり、ページを閉じると畳まれる) =================
+// 見開きごとの立ち上げ具合 pt(PT0=平ら .. PT1=立ち切った)で、群は delay/dur の順に立ち上がる。pt はツアー中に時間で進む。
+// めくり終えた見開きは平らから始める(めくる先の pt を PT0 に戻す)。
+// 群ごとに「高さ / のどからの距離」の最大(r)を求めておき、相手のページ(開き角 open)に当たらない角度までに抑える(閉じていく見開きは畳まれる)。
+// extra も pt に合わせて動き、閉じていくときは開き具合に合わせて戻る。
 // 動きを減らす設定(OS の prefers-reduced-motion)。カメラは場面ごとに止めて、めくりも短く
 const REDUCED=matchMedia('(prefers-reduced-motion: reduce)');
 const popEase=k=>REDUCED.matches?easeIO(k):easeOutBack(k);
-const POP_RATE=5,HALF=Math.PI/2;
+const HALF=Math.PI/2,PT0=1,PT1=5.6;
 function popAngle(q,open){
-  if(open>=HALF-1e-6||q.r<=0)return HALF;
+  if(open>=HALF-1e-6||q.r<=0)return Infinity;
   return Math.asin(Math.min(1,.9*Math.tan(Math.max(0,open))/q.r));
 }
 function setPop(q){
-  const a=Math.max(.004,q.a),c=Math.cos(a),s=Math.max(.006,Math.sin(a)),lift=q.layer*.03*(1-a/HALF);
+  const a=Math.max(.004,q.a),c=Math.cos(a),s=Math.max(.006,Math.sin(a)),lift=q.layer*.03*Math.max(0,1-a/HALF);
   q.g.matrix.set(1,c*q.dx,0,q.p[0], 0,s,0,q.p[1]+.012+lift, 0,c*q.dz,1,q.p[2], 0,0,0,1);
   q.g.matrixWorldNeedsUpdate=true;
 }
-function applyOpen(b,open,dt){
-  if(open===b.open&&b.settled)return false;
-  b.open=open;let settled=true,ch=false;
+// 立ち上げ具合で決まる角度(少し行き過ぎて戻る)と、開き角で決まる上限の小さいほう
+function applyOpen(b,open){
+  if(open===b.open&&b.pt===b.ptA)return false;
+  b.open=open;b.ptA=b.pt;let ch=false;
   for(const q of b.pops){
-    const tgt=popAngle(q,open);let a=q.a;
-    if(a===undefined||tgt<a||dt===Infinity)a=tgt;
-    else if(tgt>a){a=Math.min(tgt,a+POP_RATE*dt);if(a<tgt)settled=false}
+    const a=Math.min(popEase(clamp((b.pt-q.delay)/q.dur,0,1))*HALF,popAngle(q,open));
     if(a!==q.a){q.a=a;setPop(q);ch=true}
   }
-  const x=clamp((open/Math.PI-.5)/.5,0,1),pe=1+4.6*x*x*(3-2*x);
+  const x=clamp((open/Math.PI-.5)/.5,0,1),pe=Math.min(b.pt,PT0+(PT1-PT0)*x*x*(3-2*x));
   if(pe!==b.pe){b.pe=pe;ch=true;for(const e of b.extras)e.f(popEase(clamp((pe-e.delay)/e.dur,0,1)))}
-  b.settled=settled;return ch;
+  return ch;
 }
+// 開いている見開きを、ツアーが始まったら立ち上げる。途中で全体に戻っても最後まで立ち上げる(一時停止中は止まる。動きを減らす設定では2倍の速さ)
+function risePops(dt){const b=built();if(b&&b.pt<PT1&&(phase==='tour'||b.pt>PT0))b.pt=Math.min(PT1,b.pt+dt*(REDUCED.matches?2:1))}
 const openOf=s=>clamp(turnables[s].alpha-turnables[s+1].alpha,0,Math.PI);
 let debugOpen=null;   // 確認用 ?open=度
-function updatePops(dt){
+function updatePops(){
   let ch=false;
-  for(let s=0;s<N;s++){const b=spreads[s].b;if(b&&b.root.visible&&applyOpen(b,s===active&&debugOpen!==null?debugOpen:openOf(s),dt))ch=true}
+  for(let s=0;s<N;s++){const b=spreads[s].b;if(b&&b.root.visible&&applyOpen(b,s===active&&debugOpen!==null?debugOpen:openOf(s)))ch=true}
   return ch;
 }
 function popReach(b){
@@ -320,7 +323,7 @@ function build(s){
   setPageMat(leftPage(s),pageMat(descTex(w,2*s+1)));
   setPageMat(rightPage(s),pageMat(groundTex(w,2*s+2),.42));
   const root=new THREE.Group();root.visible=false;rightPage(s).g.add(root);
-  const b={root,pops:[],extras:[],lights:[],tick:null,live:false,res:null,open:NaN,pe:NaN,settled:false};
+  const b={root,pops:[],extras:[],lights:[],tick:null,live:false,res:null,open:NaN,pe:NaN,pt:PT0,ptA:NaN};
   const B={no:w.no,root,
     pop(parent,p,dir,delay,dur=1.1,layer=1){const g=new THREE.Group();g.matrixAutoUpdate=false;parent.add(g);b.pops.push({g,p,dx:dir[0],dz:dir[1],delay,dur,layer});return g},
     extra(delay,dur,f){b.extras.push({delay,dur,f})},
@@ -328,7 +331,7 @@ function build(s){
   const r=w.build(B)||{};b.tick=r.tick;b.live=!!r.liveShadows;
   popReach(b);
   mergeStatic(b);
-  for(const q of b.pops)q.a=undefined;applyOpen(b,0,Infinity);b.open=NaN;
+  for(const q of b.pops)q.a=undefined;b.pt=PT0;applyOpen(b,0);b.open=NaN;
   b.res=collect(b,s);track(b.res.texs);sp.b=b;return b;
 }
 // ================= 描画命令を減らす =================
@@ -340,7 +343,8 @@ function liveSet(b){
   // 途中で動いて最後に元へ戻る部品(大きさ 0→1 など)も拾えるように、試すたびに比べる
   const before=snap(),live=new Set();
   const cmp=()=>snap().forEach((v,i)=>{if(v!==before[i])live.add(objs[i])});
-  for(const o of [0,.4,.8,1.2,1.5,1.8,2.2,2.6,Math.PI]){b.settled=false;applyOpen(b,o,Infinity);cmp()}
+  b.pt=PT1;for(const o of [0,.4,.8,1.2,1.5,1.8,2.2,2.6,Math.PI]){applyOpen(b,o);cmp()}
+  for(const pt of [PT0,1.5,2,2.5,3,3.5,4,4.5,5,PT1]){b.pt=pt;applyOpen(b,Math.PI);cmp()}
   if(b.tick){b.root.updateMatrixWorld(true);for(const T of [0,1.3,7.7,31]){b.tick(T,.016);cmp()}}
   for(const o of objs)if(o.userData.live)live.add(o);
   return live;
@@ -442,7 +446,7 @@ function trim(){spreads.forEach((sp,i)=>{if(sp.b&&Math.abs(i-active)>1&&i!==targ
 function showOnly(...idx){
   spreads.forEach((sp,i)=>{
     if(!sp.b)return;const on=idx.includes(i);
-    if(on&&!sp.b.root.visible){sp.b.open=NaN;sp.b.settled=false}   // 見え始めたら開き具合を当て直す
+    if(on&&!sp.b.root.visible)sp.b.open=NaN;   // 見え始めたら開き具合を当て直す
     sp.b.root.visible=on;
     const first=idx.find(k=>spreads[k]&&spreads[k].b);
     for(const l of sp.b.lights)l.visible=on&&i===first;
@@ -503,7 +507,7 @@ function updateNav(){
 function updateUI(){
   $('back').style.display=phase==='tour'?'flex':'none';
   $('tap').classList.toggle('on',phase==='top'&&(!isSpread(active)||!!built()));
-  $('tap').textContent=active<0?`表紙を${TAP_WORD}すると、本が開きます`:active>=N?`おしまい　${TAP_WORD}すると、もう一度開きます`:`${TAP_WORD}すると、近くで見てまわります`;
+  $('tap').textContent=active<0?`表紙を${TAP_WORD}すると、本が開きます`:active>=N?`おしまい　${TAP_WORD}すると、もう一度開きます`:built()&&built().pt>PT0?`${TAP_WORD}すると、近くで見てまわります`:`本を${TAP_WORD}すると、絵が立ち上がります`;
   $('prog').classList.toggle('on',phase==='tour');
   $('nextw').classList.toggle('on',phase==='tour'&&looped);
   $('nextw').firstChild.textContent=active>=N-1?'本を閉じる':'次の作品へ';
@@ -515,6 +519,7 @@ function startTurn(t0=0){
   const fwd=target>active,j=fwd?active+1:active,to=active+(fwd?1:-1),cover=j===0||j===N;
   const dur=REDUCED.matches?.5:Math.abs(target-active)>1?(cover?1:.8):(cover?1.9:1.5);
   turnQ={j,from:fwd?0:Math.PI,to:fwd?Math.PI:0,pos:to,t:t0,dur};settling=false;
+  const nb=isSpread(to)&&spreads[to].b;if(nb)nb.pt=PT0;   // めくり終えた見開きは平ら(タップで立ち上がる)
   showOnly(active,to);phase='turn';
   // 表紙を開け閉めするときは、カメラも本の位置へ動かす
   const tp=topPose(to);if(!qs.has('view')&&tp.p.distanceTo(camera.position)>.5)tweenTo(tp,dur);
@@ -562,7 +567,7 @@ function prebuild(){
 }
 function blendFrom(dur){blend=paused?null:{p:camera.position.clone(),l:camLook.clone(),t:0,dur}}
 function startTour(){if(phase!=='top'||!built())return;idleTok++;setPaused(false);$('plate').innerHTML=work().plate||'';phase='tour';tau=0;looped=false;noBL=-1;blendFrom(REDUCED.matches?.8:3);makeProg();fitCap();updateUI()}
-// 全体を見ているときのタップ: 見開きならツアー、閉じた本なら開く
+// 全体を見ているときのタップ: 見開きなら立ち上げてツアー、閉じた本なら開く
 function tapAction(){if(phase!=='top')return;if(active<0)request(0);else if(active>=N)request(N-1);else startTour()}
 // 字幕を読み切れるように、場面ごとに進む速さを落とす(1秒に8文字 + 余裕1.5秒。最初の場面は字幕が1.5秒遅れて出る)
 const CPS=8;
@@ -732,7 +737,8 @@ function tick(now){
   // 本: めくっている間とばねが落ち着くまで置き直す。飛び出しは開き具合が変わった見開きだけ当て直す
   const bookMoved=stepSprings(mdt)||phase==='turn';
   if(bookMoved)layout();
-  const popsMoved=updatePops(mdt);
+  risePops(dt);
+  const popsMoved=updatePops();
   if(settling&&phase==='top'&&!bookMoved&&!popsMoved)settle();
   const b=built();
   if(b&&b.tick)b.tick(T,dt);
@@ -761,13 +767,13 @@ function tick(now){
   requestAnimationFrame(tick);
 }
 // 最初の見開きは読み込み中の表示を一度描かせてから組み立てる(組み立ての間、画面が真っ暗にならないように)
-// 閉じた本から始めるときも、表紙を開いてすぐ立ち上がるように見開き1を組み立てておく
+// 閉じた本から始めるときも、表紙をすぐ開けるように見開き1を組み立てておく
 async function boot(){
   const first=clamp(active,0,N-1);
   let ok=true;
   try{await loadWork(first)}catch(err){console.error(err);ok=false;if(isSpread(active)){$('loading').querySelector('span').textContent='読み込めませんでした。ページを再読み込みしてください';return}}
   if(ok)build(first);if(isSpread(active))showOnly(active);updateUI();
-  // 確認用: ?spread=N 見開きN / ?t=秒 ツアーのその時点で停止 / ?open=度 開き具合 / ?flip=0..1 次へめくる途中 / ?slow=倍率 / ?view=x,y,z(カメラを固定) / ?auto=tour|back
+  // 確認用: ?spread=N 見開きN / ?t=秒 ツアーのその時点で停止 / ?pc=秒 立ち上がり途中 / ?open=度 開き具合 / ?flip=0..1 次へめくる途中 / ?slow=倍率 / ?view=x,y,z(カメラを固定) / ?auto=tour|back
   if(qs.has('flip')&&active<N){
     target=active+1;updateNav();if(isSpread(target)){await loadWork(target);build(target)}
     startTurn(clamp(+qs.get('flip')||0,0,.999));freeze=true;turnStep(0);const J=turnables[turnQ.j];J.alpha=J.phi;layout();
@@ -776,8 +782,9 @@ async function boot(){
   if(qs.has('view')){const [x,y,z]=qs.get('view').split(',').map(Number);tw={fp:V(x,y,z),fl:V(0,0,-2),tp:V(x,y,z),tl:V(0,0,-2),t:0,dur:1e9}}
   if(qs.get('auto')==='tour')setTimeout(startTour,300);
   if(qs.get('auto')==='back')setTimeout(()=>{startTour();setTimeout(()=>$('back').click(),2500)},300);
-  if(qs.has('t')&&built()){$('plate').innerHTML=work().plate||'';phase='tour';tau=+qs.get('t');blend=null;looped=tau>=work().tourEnd;setPaused(true);makeProg();fitCap();updateUI()}
-  updatePops(Infinity);renderer.shadowMap.needsUpdate=true;   // 閉じた本から始めると影を作る合図が出ないので、ここで一度作る
+  if(qs.has('pc')&&built())built().pt=PT0+clamp(+qs.get('pc')||0,0,PT1-PT0);
+  if(qs.has('t')&&built()){$('plate').innerHTML=work().plate||'';phase='tour';tau=+qs.get('t');built().pt=PT1;blend=null;looped=tau>=work().tourEnd;setPaused(true);makeProg();fitCap();updateUI()}
+  updatePops();updateUI();renderer.shadowMap.needsUpdate=true;   // 閉じた本から始めると影を作る合図が出ないので、ここで一度作る
   last=performance.now();requestAnimationFrame(tick);
   requestAnimationFrame(()=>{$('loading').classList.add('done');setTimeout(()=>{$('loading').hidden=true},900)});
   if(phase==='top')prebuild();
