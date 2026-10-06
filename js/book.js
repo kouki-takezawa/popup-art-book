@@ -10,7 +10,9 @@ addEventListener('resize',resize);resize();
 scene.add(new THREE.AmbientLight(0x8090c0,.38));
 const key=new THREE.SpotLight(0xfff0dd,1.05,0,.7,.6,0);
 key.position.set(-22,52,40);key.target.position.set(0,0,-4);
-key.castShadow=true;key.shadow.mapSize.set(2048,2048);key.shadow.camera.near=20;key.shadow.camera.far=140;key.shadow.bias=-.0004;
+// 影の解像度: スマホ(指で操作する小さな画面)では 1024。部品が動く間は毎フレーム影を描き直すので、そのぶん軽くなる
+const SMALL_TOUCH=matchMedia('(pointer:coarse)').matches&&Math.min(screen.width,screen.height)<600;
+key.castShadow=true;key.shadow.mapSize.setScalar(SMALL_TOUCH?1024:2048);key.shadow.camera.near=20;key.shadow.camera.far=140;key.shadow.bias=-.0004;
 scene.add(key,key.target);
 const rim=new THREE.DirectionalLight(0x6a80d0,.35);rim.position.set(20,20,-30);scene.add(rim);
 
@@ -492,7 +494,7 @@ function topPose(p=active){
   const closed=p<0||p>=N,half=XIN+CW,cx=closed?(p<0?1:-1)*half/2:0;
   const tanV=Math.tan(baseFov()*Math.PI/360);
   const needV=CD*Math.sin(ELEV)+(closed?3:12)*Math.cos(ELEV);
-  const needH=(closed?half/2:half)+1.5;
+  const needH=(closed?half/2+3:half+1.5);   // 閉じた本は手前の角と背のふくらみが縦長の画面で切れないよう広めに
   const dist=Math.max(needV*.8/tanV,needH*1.1/(tanV*camera.aspect));
   const L=V(cx,closed?0:1.5,closed?1.5:0);
   return {p:V(cx,L.y+Math.sin(ELEV)*dist,L.z+Math.cos(ELEV)*dist),l:L};
@@ -510,11 +512,14 @@ let blend=null,tw=null;
 const camLook=V(0,0,0);
 {const t=topPose();camera.position.copy(t.p);camLook.copy(t.l);camera.lookAt(camLook)}
 const $=id=>document.getElementById(id);
+if(TAP_WORD==='タップ')document.documentElement.classList.add('touch');   // 指で操作する端末(案内にカメラの動かし方を添える)
 const isSpread=p=>p>=0&&p<N;
 const work=()=>isSpread(active)?spreads[active].work:null,built=()=>isSpread(active)?spreads[active].b:null;
 function updateNav(){
   const m=isSpread(target)&&spreads[target].meta;
-  $('pg').textContent=target<0?'表紙':target>=N?'裏表紙':target===0?'扉':`見開き ${target} / ${N-1}　${m?m.name:'白紙'}`;
+  // 「見開き」は狭い画面では隠す(.w)
+  if(target<0||target>=N||target===0)$('pg').textContent=target<0?'表紙':target>=N?'裏表紙':'扉';
+  else{const w=document.createElement('span');w.className='w';w.textContent='見開き ';$('pg').replaceChildren(w,`${target} / ${N-1}　${m?m.name:'白紙'}`)}
   $('prev').disabled=target<=-1;$('next').disabled=target>=N;
   $('title').querySelector('b').textContent=m?m.name:'　';
   $('info').disabled=!m||!!m.title;
@@ -523,7 +528,8 @@ function updateUI(){
   $('back').style.display=phase==='tour'||(phase==='top'&&userCam)?'flex':'none';
   setPlayBtn(phase!=='tour'||paused);
   $('tap').classList.toggle('on',phase==='top'&&(!isSpread(active)||!!built()));
-  $('tap').textContent=active<0?`表紙を${TAP_WORD}すると、本が開きます`:active>=N?`おしまい　${TAP_WORD}すると、もう一度開きます`:built()&&built().pt>PT0?`${TAP_WORD}すると、近くで見てまわります`:`本を${TAP_WORD}すると、絵が立ち上がります`;
+  document.body.classList.toggle('touring',phase==='tour');
+  $('tap').firstChild.textContent=active<0?`表紙を${TAP_WORD}すると、本が開きます`:active>=N?`おしまい　${TAP_WORD}すると、もう一度開きます`:built()&&built().pt>PT0?`${TAP_WORD}すると、近くで見てまわります`:`本を${TAP_WORD}すると、絵が立ち上がります`;
   $('prog').classList.toggle('on',phase==='tour');
   $('nextw').classList.toggle('on',phase==='tour'&&looped);
   $('nextw').firstChild.textContent=active>=N-1?'本を閉じる':'次の作品へ';
@@ -686,7 +692,7 @@ function orbitBy(dx,dy,zoom=1){
   const yaw=Math.atan2(_off.x,_off.z)-dx*.006,el=clamp(Math.asin(clamp(_off.y/(_off.length()||1),-1,1))+dy*.005,.06,1.54);
   _off.set(Math.sin(yaw)*Math.cos(el),Math.sin(el),Math.cos(yaw)*Math.cos(el)).multiplyScalar(r);
   camera.position.copy(camLook).add(_off);
-  if(!userCam){userCam=true;updateUI()}
+  if(!userCam){userCam=true;$('tap').classList.add('knows');updateUI()}   // 動かし方が分かったので、案内の添え書きは消す
   invalidate();
 }
 const pts=new Map();let down=null,pinch=0;
@@ -726,10 +732,11 @@ function setCap(k){
   capEl.style.pointerEvents=k?'auto':'none';
 }
 capEl.onclick=()=>{if(phase==='tour')setPaused(!paused)};
-// 字幕の高さをその作品でいちばん長い字幕に合わせる(見えない複製で測る)
+// 字幕の高さをその作品でいちばん長い字幕に合わせる(見えない複製で、字幕と同じ幅にして測る。横向きのスマホでは字幕の横に場面送りが並ぶ)
 const capM=capEl.cloneNode();capM.id='capm';capM.removeAttribute('aria-live');capM.setAttribute('aria-hidden','true');capEl.parentNode.appendChild(capM);
 function fitCap(){
   const w=work();if(!w)return;let h=0;
+  capEl.style.minHeight='';capM.style.width=capEl.offsetWidth+'px';
   for(const k in w.caps){capM.textContent=w.caps[k];h=Math.max(h,capM.offsetHeight)}
   capEl.style.minHeight=h+'px';
 }
@@ -771,7 +778,7 @@ function tick(now){
   if(phase==='tour'){
     const w=work();
     tau+=dt*sceneRate(w,curScene());
-    if(!looped&&tau>=w.tourEnd){looped=true;updateUI()}
+    if(!looped&&tau>=w.tourEnd){looped=true;updateUI();fitCap()}   // 「次の作品へ」が出ると、横向きのスマホでは字幕の幅が変わる
     shot=tourPose(w,tau);pose=shot;
     if(blend){blend.t+=dt;const k=easeIO(blend.t/blend.dur);_bp.copy(blend.p).lerp(pose.p,k);_bl.copy(blend.l).lerp(pose.l,k);pose=_pose;if(blend.t>=blend.dur)blend=null}
   }else if(phase==='move'){
