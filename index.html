@@ -8,7 +8,7 @@
 <style>
 :root{--ink:#2b2216;--paper:#f1e7cf;--gold:#c9a24a;--panel:#16141c;--band:#f6f3eb}
 html,body{margin:0;height:100%;overflow:hidden;background:#0a090e;font-family:"Yu Mincho","Hiragino Mincho ProN","Noto Serif JP",serif;color:var(--paper)}
-canvas#c{display:block;width:100vw;height:100vh;touch-action:none}
+canvas#c{display:block;width:100vw;height:100vh;touch-action:pinch-zoom}
 /* 文字は動く絵の上に直接置かず不透明な地に載せる。translate(-50%) の中央寄せは小数ピクセルでにじむので使わない */
 .hud{position:fixed;pointer-events:none}
 #title{top:12px;left:16px;font-size:13px;letter-spacing:.2em;background:var(--panel);padding:6px 12px;border-radius:2px}
@@ -41,12 +41,13 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
 #dots button::before{content:"";width:7px;height:7px;border-radius:50%;background:rgba(241,231,207,.35);transition:background-color .4s}
 #dots button.done::before{background:rgba(241,231,207,.8)}
 #dots button.on::before{background:var(--gold)}
+#capm{position:absolute;left:0;right:0;bottom:0;visibility:hidden;pointer-events:none}
 #nextw{display:none!important}
 #nextw.on{display:flex!important}
 /* 額縁の場面でも、絵の上に乗るこの列は暗い地のまま */
 body.framed #prog>button{background:var(--panel);color:var(--paper);border-color:rgba(241,231,207,.4)}
 body.framed #dots button{background:transparent}
-#cap{cursor:pointer;pointer-events:auto;display:flex;align-items:center;box-sizing:border-box;background:var(--paper);color:var(--ink);padding:14px 22px;font-size:clamp(13px,.3vw + 11px,15px);line-height:1.9;letter-spacing:.05em;border-radius:2px;box-shadow:0 6px 30px rgba(0,0,0,.5);opacity:0;transition:opacity .9s}
+#cap,#capm{cursor:pointer;display:flex;align-items:center;box-sizing:border-box;background:var(--paper);color:var(--ink);padding:14px 22px;font-size:clamp(13px,.3vw + 11px,15px);line-height:1.9;letter-spacing:.05em;border-radius:2px;box-shadow:0 6px 30px rgba(0,0,0,.5);opacity:0;transition:opacity .9s}
 /* 額縁の場面: 白い帯を上下にだけ出す(左右はなし)。題名・ボタン・ページ送りは帯の上に乗る */
 #frame{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0;transition:opacity 1.4s;
   border-style:solid;border-color:var(--band);border-width:76px 0 64px;

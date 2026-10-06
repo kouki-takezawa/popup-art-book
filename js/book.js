@@ -99,7 +99,9 @@ function loadWork(i){
   if(!e||BOOK.works[i+1])return Promise.resolve();
   return loadingP[i]||(loadingP[i]=new Promise((ok,ng)=>{
     const sc=document.createElement('script');sc.src=`works/${e.file}.js`;
-    sc.onload=ok;sc.onerror=()=>{delete loadingP[i];sc.remove();ng(new Error('作品を読み込めませんでした: '+e.file))};
+    const fail=()=>{delete loadingP[i];sc.remove();ng(new Error('作品を読み込めませんでした: '+e.file))};
+    // 途中で切れたり中で例外が出たりしても onload は来るので、登録されたかで確かめる
+    sc.onload=()=>BOOK.works[i+1]?ok():fail();sc.onerror=fail;
     document.head.appendChild(sc);
   }));
 }
@@ -141,18 +143,19 @@ function build(s){
 function liveSet(b){
   const objs=[];b.root.traverse(o=>objs.push(o));
   const snap=()=>objs.map(o=>[...o.position.toArray(),...o.quaternion.toArray(),...o.scale.toArray()].join());
-  const before=snap();
-  for(const pt of [0,1.5,2.5,3,3.5,4,5,6])applyPops(b,pt);
-  if(b.tick){b.root.updateMatrixWorld(true);for(const T of [0,1.3,7.7,31])b.tick(T,.016)}
-  const after=snap(),live=new Set();
-  objs.forEach((o,i)=>{if(before[i]!==after[i]||o.userData.live)live.add(o)});
+  // 途中で動いて最後に元へ戻る部品(大きさ 0→1 など)も拾えるように、試すたびに比べる
+  const before=snap(),live=new Set();
+  const cmp=()=>snap().forEach((v,i)=>{if(v!==before[i])live.add(objs[i])});
+  for(const pt of [0,1.5,2.5,3,3.5,4,5,6]){applyPops(b,pt);cmp()}
+  if(b.tick){b.root.updateMatrixWorld(true);for(const T of [0,1.3,7.7,31]){b.tick(T,.016);cmp()}}
+  for(const o of objs)if(o.userData.live)live.add(o);
   return live;
 }
 function mergeStatic(b){
   const live=liveSet(b),domains=new Set([b.root,...b.pops.map(q=>q.g)]),groups=new Map();
   const plainOBR=THREE.Object3D.prototype.onBeforeRender;
   b.root.traverse(o=>{
-    if(!o.isMesh||o.isInstancedMesh||o.isSkinnedMesh||o.children.length||!o.visible||Array.isArray(o.material)||o.onBeforeRender!==plainOBR)return;
+    if(!o.isMesh||o.isInstancedMesh||o.isSkinnedMesh||o.children.length||!o.visible||Array.isArray(o.material)||o.material.transparent||o.onBeforeRender!==plainOBR)return;
     const g=o.geometry,at=g.attributes;
     if(!at.position||g.drawRange.start!==0||g.drawRange.count!==Infinity||Object.keys(g.morphAttributes).length)return;
     if(Object.values(at).some(a=>a.isInterleavedBufferAttribute||!(a.array instanceof Float32Array)))return;
@@ -300,7 +303,7 @@ function updateUI(){
 function tweenTo(pose,dur){tw={fp:camera.position.clone(),fl:camLook.clone(),tp:pose.p,tl:pose.l,t:0,dur}}
 // 作品の切り替えは、畳む 1.2秒 + めくる 1.5秒(動きを減らす設定では 0.6秒 + 0.5秒)
 const FOLD_T=()=>REDUCED.matches?.6:1.2,FLIP_T=()=>REDUCED.matches?.5:1.5;
-function foldThen(next){setCap(null);phase='fold';afterFold=next;orbit.yaw=orbit.pitch=0;tweenTo(topPose(),FOLD_T());updateUI()}
+function foldThen(next){setCap(null);setPaused(false);phase='fold';afterFold=next;orbit.yaw=orbit.pitch=0;tweenTo(topPose(),FOLD_T());updateUI()}
 // 何枚も送るとき、途中の見開きは組み立てずに白紙のままめくる(組み立て済みなら中身ごと)
 function startFlip(t0=0){
   const fwd=target>active;flip={k:fwd?active:active-1,to:active+(fwd?1:-1),fwd,t:t0};
@@ -313,7 +316,7 @@ function request(i){
   const go=()=>{
     phase='wait';updateUI();
     loadWork(i).then(()=>{build(i);startFlip();updateUI()}).catch(err=>{
-      console.error(err);target=active;updateNav();phase='top';updateUI();
+      console.error(err);target=active;updateNav();phase='top';updateUI();prebuild();
     });
   };
   if(phase==='tour')foldThen(go);else go();
@@ -347,7 +350,7 @@ function sceneRate(w,i){
 function curScene(){const w=work(),t=tourTime(w,tau);const i=w.tour.findIndex(s=>t<s.t1);return i<0?w.tour.length-1:i}
 function gotoScene(i){
   if(phase!=='tour')return;const w=work();i=clamp(i,0,w.tour.length-1);
-  blendFrom(REDUCED.matches?.4:1.2);tau=w.tour[i].t0;noBL=i;
+  blendFrom(REDUCED.matches?.4:1.2);tau=w.tour[i].t0;noBL=i;invalidate();
 }
 $('sprev').onclick=()=>gotoScene(curScene()-1);$('snext').onclick=()=>gotoScene(curScene()+1);
 $('dots').onclick=e=>{const b=e.target.closest('button');if(b)gotoScene(+b.dataset.i)};
@@ -362,7 +365,7 @@ addEventListener('keydown',e=>{
     if(e.shiftKey&&phase==='tour')gotoScene(curScene()+d);else request(active+d);
   }
   // スペース: ツアー中は一時停止・再開、真上では立ち上げる(ボタンにフォーカスがあるときはボタンに任せる)
-  if(e.key===' '&&!(e.target instanceof HTMLButtonElement)){e.preventDefault();if(phase==='tour')setPaused(!paused);else rise()}
+  if(e.key===' '&&!(e.target instanceof HTMLButtonElement)){e.preventDefault();if(e.repeat)return;if(phase==='tour')setPaused(!paused);else rise()}
 });
 function setPaused(v){
   paused=v;const b=$('pause'),l=v?'再生':'一時停止';
@@ -378,15 +381,17 @@ for(const d of document.querySelectorAll('dialog')){
   d.addEventListener('click',e=>{if(e.target===d)d.close()});
   d.addEventListener('close',()=>{if(pausedByDlg){pausedByDlg=false;setPaused(false)}});
 }
-$('info').onclick=()=>{
+function openSheet(retry){
   const w=spreads[target].work;
-  if(!w){if(spreads[target].meta)loadWork(target).then(()=>$('info').click(),err=>console.error(err));return}
+  if(!w){if(retry&&spreads[target].meta)loadWork(target).then(()=>openSheet(false),err=>console.error(err));return}
+  if($('sheet').open)return;
   const d=w.desc;
   $('sheet-b').innerHTML=`<div class="no">第 ${w.no} 話</div><h2 id="sheet-h">${esc(w.name)}</h2><div class="orig">${esc(d.orig)}</div>`+
     `<div class="meta">${esc(d.artist)}<small>${esc(d.medium)}</small></div>${d.paras.map(t=>`<p>${esc(t)}</p>`).join('')}`+
     (d.points?`<h3>見どころ</h3><ul>${d.points.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:'');
   openDlg($('sheet'));
-};
+}
+$('info').onclick=()=>openSheet(true);
 $('toclist').innerHTML=spreads.map((sp,i)=>{
   const m=sp.meta;
   return `<li><button data-i="${i}"><img src="thumbs/${String(i+1).padStart(2,'0')}.jpg" alt="" loading="lazy" width="400" height="206">`+
@@ -403,7 +408,9 @@ $('toclist').onclick=e=>{const b=e.target.closest('button');if(!b)return;$('tocd
 const orbit={yaw:0,pitch:0,drag:false};
 let down=null;
 const cvs=renderer.domElement;
-cvs.addEventListener('pointerdown',e=>{if(down)return;down={id:e.pointerId,x:e.clientX,y:e.clientY,lx:e.clientX,ly:e.clientY,moved:false};cvs.setPointerCapture(e.pointerId)});
+// テクスチャの元の canvas は捨ててあるので、WebGL のコンテキストが失われて戻ったときは読み込み直す
+cvs.addEventListener('webglcontextrestored',()=>location.reload());
+cvs.addEventListener('pointerdown',e=>{if(down||e.button!==0)return;down={id:e.pointerId,x:e.clientX,y:e.clientY,lx:e.clientX,ly:e.clientY,moved:false};cvs.setPointerCapture(e.pointerId)});
 cvs.addEventListener('pointermove',e=>{
   if(!down||e.pointerId!==down.id)return;
   if(Math.hypot(e.clientX-down.x,e.clientY-down.y)>8)down.moved=true;
@@ -423,6 +430,7 @@ function endPointer(e,cancel){
 }
 cvs.addEventListener('pointerup',e=>endPointer(e,false));
 cvs.addEventListener('pointercancel',e=>endPointer(e,true));
+cvs.addEventListener('lostpointercapture',e=>endPointer(e,true));
 // ドラッグの分だけ、注視点のまわりにカメラを回す(上下は机にもぐらず真上を越えない範囲で)
 const _off=new THREE.Vector3(),_axis=new THREE.Vector3(),_up=new THREE.Vector3(0,1,0);
 function applyOrbit(){
@@ -434,13 +442,18 @@ function applyOrbit(){
 }
 
 const capEl=$('cap');let capNow=null;
-function setCap(k){if(k===capNow)return;capNow=k;if(k){capEl.textContent=work().caps[k];capEl.style.opacity=1}else capEl.style.opacity=0}
+function setCap(k){
+  if(k===capNow)return;capNow=k;
+  if(k){capEl.textContent=work().caps[k];capEl.style.opacity=1}else capEl.style.opacity=0;
+  capEl.style.pointerEvents=k?'auto':'none';
+}
 capEl.onclick=()=>{if(phase==='tour')setPaused(!paused)};
-// 字幕の高さをその作品でいちばん長い字幕に合わせる(描画の前に測って戻すので、ちらつかない)
+// 字幕の高さをその作品でいちばん長い字幕に合わせる(見えない複製で測る)
+const capM=capEl.cloneNode();capM.id='capm';capM.removeAttribute('aria-live');capM.setAttribute('aria-hidden','true');capEl.parentNode.appendChild(capM);
 function fitCap(){
-  const w=work();if(!w)return;const keep=capEl.textContent;let h=0;capEl.style.minHeight='0';
-  for(const k in w.caps){capEl.textContent=w.caps[k];h=Math.max(h,capEl.offsetHeight)}
-  capEl.textContent=keep;capEl.style.minHeight=h+'px';
+  const w=work();if(!w)return;let h=0;
+  for(const k in w.caps){capM.textContent=w.caps[k];h=Math.max(h,capM.offsetHeight)}
+  capEl.style.minHeight=h+'px';
 }
 // ツアーの進み具合(場面ごとの点)
 const dotsEl=$('dots');let progN=-1;
@@ -454,23 +467,27 @@ updateNav();updateUI();
 addEventListener('resize',()=>{fitCap();invalidate();if(phase==='top'&&!tw){const t=topPose();camera.position.copy(t.p);camLook.copy(t.l)}});
 // 端末の性能に合わせてピクセル比を下げる(続けて描いている間の平均フレーム時間で判断。?pr=数値 で固定)
 const PR_MAX=Math.min(2,devicePixelRatio),PR_MIN=Math.min(PR_MAX,.75);
-let pr=qs.has('pr')?+qs.get('pr'):PR_MAX,prCap=PR_MAX;const prFixed=qs.has('pr'),perf={t:0,n:0,good:0};
+const prQ=+qs.get('pr'),prFixed=qs.has('pr')&&Number.isFinite(prQ),perf={t:0,n:0,good:0};
+let pr=prFixed?clamp(prQ,.5,3):PR_MAX,prCap=PR_MAX;
 renderer.setPixelRatio(pr);
 function adaptPR(raw){
   if(prFixed)return;
   if(raw>.25){perf.t=perf.n=0;return}   // 組み立てやタブの切り替えで空いた時間は数えない
   perf.t+=raw;perf.n++;if(perf.t<2)return;
   const avg=perf.t/perf.n;perf.t=perf.n=0;
-  if(avg>1/40&&pr>PR_MIN){prCap=pr-.25;pr=Math.max(PR_MIN,pr-.25);perf.good=0;renderer.setPixelRatio(pr)}
-  else if(avg<1/55&&pr<prCap){if(++perf.good>=3){pr=Math.min(prCap,pr+.25);perf.good=0;renderer.setPixelRatio(pr)}}
+  // 比率を変えると canvas が消えるので、次のフレームで必ず描き直す
+  if(avg>1/40&&pr>PR_MIN){prCap=pr-.25;pr=Math.max(PR_MIN,pr-.25);perf.good=0;renderer.setPixelRatio(pr);invalidate()}
+  else if(avg<1/55&&pr<prCap){if(++perf.good>=3){pr=Math.min(prCap,pr+.25);perf.good=0;renderer.setPixelRatio(pr);invalidate()}}
   else perf.good=0;
 }
 
+let freeze=false;   // 確認用 ?flip でめくり途中に止める
 let last=performance.now(),drewLast=false,frame=0,lastPc=-1,frLast=null;
 const _bp=new THREE.Vector3(),_bl=new THREE.Vector3(),_pose={p:_bp,l:_bl};
 function tick(now){
   const raw=(now-last)/1000,rdt=Math.min(.05,raw);last=now;frame++;
   let dt=paused?0:rdt;T+=dt;
+  const mdt=freeze?0:rdt;   // 畳む・めくる・カメラの移動用(一時停止では止めない)
   let pose=null,shot=null;
   if(phase==='tour'){
     const w=work();
@@ -481,11 +498,11 @@ function tick(now){
     shot=tourPose(w,tau);pose=shot;
     if(blend){blend.t+=dt;const k=easeIO(blend.t/blend.dur);_bp.copy(blend.p).lerp(pose.p,k);_bl.copy(blend.l).lerp(pose.l,k);pose=_pose;if(blend.t>=blend.dur)blend=null}
   }else if(phase==='fold'){
-    pc=Math.max(0,pc-dt*4.6/FOLD_T());
+    pc=Math.max(0,pc-mdt*4.6/FOLD_T());
     if(pc<=0&&!tw){const f=afterFold;afterFold=null;f&&f()}
   }else if(phase==='flip'){
     // 飛び出す絵本のページは厚紙なので、曲げずにめくる(畳んだ部品も紙と一緒に動く)。何枚も送るときは速く
-    flip.t+=dt/(Math.abs(target-active)>1?Math.min(.9,FLIP_T()):FLIP_T());const k=easeIO(flip.t);
+    flip.t+=mdt/(Math.abs(target-active)>1?Math.min(.9,FLIP_T()):FLIP_T());const k=easeIO(flip.t);
     setLeaf(flip.k,Math.PI*(flip.fwd?k:1-k));
     if(flip.t>=1){
       setLeaf(flip.k,flip.fwd?Math.PI:0);active=flip.to;
@@ -501,7 +518,7 @@ function tick(now){
   if(b){if(pcMoved)applyPops(b,pc+1);b.tick&&b.tick(T,dt)}
   if(pcMoved||phase==='flip'||(b&&b.live&&dt>0&&frame%4===0))renderer.shadowMap.needsUpdate=true;
   const twOn=!!tw;
-  if(tw){tw.t+=dt;const k=easeIO(tw.t/tw.dur);_bp.copy(tw.fp).lerp(tw.tp,k);_bl.copy(tw.fl).lerp(tw.tl,k);pose=_pose;if(tw.t>=tw.dur)tw=null}
+  if(tw){tw.t+=mdt;const k=easeIO(tw.t/tw.dur);_bp.copy(tw.fp).lerp(tw.tp,k);_bl.copy(tw.fl).lerp(tw.tl,k);pose=_pose;if(tw.t>=tw.dur)tw=null}
   if(pose){camera.position.copy(pose.p);camLook.copy(pose.l)}
   if(phase==='tour')applyOrbit();
   // 場面ごとの画角(額縁の場面で絵を画面いっぱいに)。縦長の画面では広めに
@@ -527,14 +544,14 @@ async function boot(){
   try{await loadWork(active)}catch(err){console.error(err);$('loading').querySelector('span').textContent='読み込めませんでした。ページを再読み込みしてください';return}
   build(active);showOnly(active);updateUI();
   // 確認用: ?spread=N 見開きN / ?t=秒 ツアーのその時点で停止 / ?pc=秒 立ち上がり途中で真上から / ?flip=0..1 次へめくる途中 / ?view=x,y,z / ?auto=rise|back
-  if(qs.has('flip')&&active<N-1){target=active+1;updateNav();await loadWork(target);build(target);startFlip(+qs.get('flip'));setPaused(true);setLeaf(flip.k,Math.PI*easeIO(flip.t))}
+  if(qs.has('flip')&&active<N-1){target=active+1;updateNav();await loadWork(target);build(target);startFlip(+qs.get('flip'));freeze=true;setLeaf(flip.k,Math.PI*easeIO(flip.t))}
   if(qs.has('pc')){pc=+qs.get('pc');setPaused(true)}
   if(qs.has('view')){const [x,y,z]=qs.get('view').split(',').map(Number);tw={fp:V(x,y,z),fl:V(0,0,-2),tp:V(x,y,z),tl:V(0,0,-2),t:0,dur:1e9}}
   if(qs.get('auto')==='rise')setTimeout(rise,300);
   if(qs.get('auto')==='back')setTimeout(()=>{rise();setTimeout(()=>$('back').click(),2500)},300);
   if(qs.has('t')&&built()){$('plate').innerHTML=work().plate||'';phase='tour';tau=+qs.get('t');pc=4.6;blend=null;looped=tau>=work().tourEnd;setPaused(true);makeProg();fitCap();updateUI()}
   last=performance.now();requestAnimationFrame(tick);
-  requestAnimationFrame(()=>$('loading').classList.add('done'));
+  requestAnimationFrame(()=>{$('loading').classList.add('done');setTimeout(()=>{$('loading').hidden=true},900)});
   if(phase==='top')prebuild();
 }
 requestAnimationFrame(()=>setTimeout(boot,30));
