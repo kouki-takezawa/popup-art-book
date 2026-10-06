@@ -501,10 +501,10 @@ function topPose(p=active){
 // ================= 状態 =================
 // phase: top(全体を見ている) / tour(巡回) / move(全体の視点へ戻る) / turn(めくる) / wait(読み込み待ち)
 const qs=new URLSearchParams(location.search);
-let active=qs.has('spread')?clamp(+qs.get('spread')|0,0,N-1):-1;   // ?spread=N は作品 N(0 は扉)
+// ?spread=N は作品 N(0 は扉)から始める。OP を流すとき(js/opening.js)は閉じた本に戻す。めくっても URL には書かない(再読み込みで必ず OP が流れるように)
+let active=qs.has('spread')?clamp(+qs.get('spread')|0,0,N-1):-1;
 let target=active,phase='top',tau=0,turnQ=null,paused=false,T=0,afterMove=null,looped=false,settling=false;
 let userCam=false;   // 自分でカメラを動かした(全体の視点やツアーの視点から外れている)
-let syncURL=true;    // めくり終えたら URL(?spread)に入れる(OP の間は入れない。再読み込みでも OP から流れるように)
 placeAt(active);
 let blend=null,tw=null;
 const camLook=V(0,0,0);
@@ -549,7 +549,6 @@ function turnStep(dt){
   active=q.pos;turnQ=null;
   if(active!==target){startTurn();return}
   phase='top';settling=true;   // 後片付けは tick で、板のばねと部品が落ち着いてから(settle)
-  if(syncURL)history.replaceState(null,'',(isSpread(active)?'?spread='+active:location.pathname)+location.hash);
   updateUI();
 }
 function settle(){settling=false;showOnly(active);trim();prCap=PR_MAX;prebuild()}

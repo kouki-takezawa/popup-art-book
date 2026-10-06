@@ -1,17 +1,20 @@
 'use strict';
 // OP(js/book.js のあとに読む。book.js の変数・関数をそのまま使う)
-// 閉じた本から始めるとき(URL に ?spread が無いとき)は毎回流れる: 表紙がひとりでに開き、扉の見開きで紙の劇場が立ち上がり、
+// 読み込むたびに必ず流れる(URL に ?spread があっても): 表紙がひとりでに開き、扉の見開きで紙の劇場が立ち上がり、
 // カメラが正面へ回り込んで少し横へ流れ、見開き1へめくれる。終わるまで操作を受けない(飛ばせない)。音はなし。
-// 確認用: ?noop で OP を飛ばす
-if(active<0&&!qs.has('noop')&&!qs.has('flip')){
+// 確認用: ?noop、または確認用のパラメータ(?t ?pc ?flip ?open ?view ?auto)があるときは流さず、?spread の見開きから始める
+if(!['noop','t','pc','flip','open','view','auto'].some(k=>qs.has(k))){
+  // ?spread で開いていたら閉じた本に戻し、URL からも消す(OP のあとは見開き1)
+  if(active!==-1){active=target=-1;placeAt(-1);const t=topPose();camera.position.copy(t.p);camLook.copy(t.l);camera.lookAt(camLook);updateNav()}
+  if(qs.has('spread')){const u=new URLSearchParams(location.search);u.delete('spread');history.replaceState(null,'',location.pathname+(u.toString()?'?'+u:'')+location.hash)}
   // 操作を止める: 画面を覆う透明な板と、キー入力の横取り。UI は OP の間は隠す(index.html の html.op)
   document.documentElement.classList.add('op');
   const block=document.createElement('div');block.id='opblock';document.body.appendChild(block);
   const keyBlock=e=>{e.stopImmediatePropagation();e.preventDefault()};
   addEventListener('keydown',keyBlock,true);
-  phase='op';syncURL=false;   // tapAction / request は phase が top でないと動かない。boot も先読みをしない
+  phase='op';   // tapAction / request は phase が top でないと動かない。boot も先読みをしない
   function finish(){
-    phase='top';syncURL=true;
+    phase='top';
     block.remove();removeEventListener('keydown',keyBlock,true);
     document.documentElement.classList.remove('op');
     updateNav();updateUI();prebuild();invalidate();
