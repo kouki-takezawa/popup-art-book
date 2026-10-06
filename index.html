@@ -8,7 +8,7 @@
 <style>
 :root{--ink:#2b2216;--paper:#f1e7cf;--gold:#c9a24a;--panel:#16141c;--band:#f6f3eb}
 html,body{margin:0;height:100%;overflow:hidden;background:#0a090e;font-family:"Yu Mincho","Hiragino Mincho ProN","Noto Serif JP",serif;color:var(--paper)}
-canvas#c{display:block;width:100vw;height:100vh}
+canvas#c{display:block;width:100vw;height:100vh;touch-action:none}
 /* 文字は動く絵の上に直接置かず不透明な地に載せる。translate(-50%) の中央寄せは小数ピクセルでにじむので使わない */
 .hud{position:fixed;pointer-events:none}
 #title{top:12px;left:16px;font-size:13px;letter-spacing:.2em;background:var(--panel);padding:6px 12px;border-radius:2px}
@@ -26,17 +26,27 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
 #back{display:none}
 .hud,#tools,#nav{z-index:2}
 #title,#pg,button{transition:color 1.4s,background-color 1.4s,border-color 1.4s}
-#tap{left:0;right:0;margin:0 auto;width:max-content;bottom:62px;font-size:14px;letter-spacing:.2em;background:var(--panel);padding:8px 18px;border-radius:2px;transition:opacity .8s;white-space:nowrap}
+#tap{position:fixed;z-index:2;left:0;right:0;margin:0 auto;width:max-content;bottom:62px;font-size:14px;letter-spacing:.2em;padding:8px 18px;white-space:nowrap;opacity:0;visibility:hidden;transition:opacity .8s,visibility .8s}
+#tap.on{opacity:1;visibility:visible}
 #nav{position:fixed;left:0;right:0;bottom:14px;display:flex;justify-content:center;align-items:center;gap:14px;white-space:nowrap}
 #nav button{width:40px;height:34px;font-size:15px}
 #pg{font-size:13px;letter-spacing:.18em;min-width:12em;text-align:center;background:var(--panel);padding:8px 14px;border-radius:2px}
 /* 字幕まわり: 下端を固定し、高さはその作品でいちばん長い字幕に合わせる(字幕ごとに上端が跳ねないように)。額縁の場面でも位置は変えない */
 #capbox{position:fixed;z-index:2;left:0;right:0;margin:0 auto;bottom:82px;width:min(640px,calc(100vw - 32px));pointer-events:none}
-#prog{display:flex;justify-content:center;align-items:center;gap:8px;margin-bottom:8px;opacity:0;transition:opacity .9s}
-#prog i{width:7px;height:7px;border-radius:50%;background:rgba(241,231,207,.35);box-shadow:0 0 0 1px rgba(10,9,14,.5);transition:background-color .4s}
-#prog i.on{background:var(--gold)}
-#prog i.done{background:rgba(241,231,207,.8)}
-#cap{display:flex;align-items:center;box-sizing:border-box;background:var(--paper);color:var(--ink);padding:14px 22px;font-size:clamp(13px,.3vw + 11px,15px);line-height:1.9;letter-spacing:.05em;border-radius:2px;box-shadow:0 6px 30px rgba(0,0,0,.5);opacity:0;transition:opacity .9s}
+#prog{display:flex;justify-content:center;align-items:center;gap:6px;margin-bottom:8px;opacity:0;visibility:hidden;transition:opacity .9s,visibility .9s;pointer-events:auto}
+#prog.on{opacity:1;visibility:visible}
+#prog>button{height:26px;padding:0 8px;font-size:12px;letter-spacing:.12em;display:flex;align-items:center;gap:4px}
+#dots{display:flex;background:var(--panel);border-radius:13px;padding:0 4px}
+#dots button{width:20px;height:26px;padding:0;border:none;background:transparent;display:flex;align-items:center;justify-content:center}
+#dots button::before{content:"";width:7px;height:7px;border-radius:50%;background:rgba(241,231,207,.35);transition:background-color .4s}
+#dots button.done::before{background:rgba(241,231,207,.8)}
+#dots button.on::before{background:var(--gold)}
+#nextw{display:none!important}
+#nextw.on{display:flex!important}
+/* 額縁の場面でも、絵の上に乗るこの列は暗い地のまま */
+body.framed #prog>button{background:var(--panel);color:var(--paper);border-color:rgba(241,231,207,.4)}
+body.framed #dots button{background:transparent}
+#cap{cursor:pointer;pointer-events:auto;display:flex;align-items:center;box-sizing:border-box;background:var(--paper);color:var(--ink);padding:14px 22px;font-size:clamp(13px,.3vw + 11px,15px);line-height:1.9;letter-spacing:.05em;border-radius:2px;box-shadow:0 6px 30px rgba(0,0,0,.5);opacity:0;transition:opacity .9s}
 /* 額縁の場面: 白い帯を上下にだけ出す(左右はなし)。題名・ボタン・ページ送りは帯の上に乗る */
 #frame{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0;transition:opacity 1.4s;
   border-style:solid;border-color:var(--band);border-width:76px 0 64px;
@@ -54,6 +64,7 @@ body.framed #hint{display:none}
 #loading i{display:block;width:120px;height:2px;background:rgba(241,231,207,.15);overflow:hidden;position:relative}
 #loading i::after{content:"";position:absolute;inset:0;width:40%;background:var(--gold);animation:load 1.2s ease-in-out infinite}
 @keyframes load{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+@media (prefers-reduced-motion:reduce){*,::before,::after{transition-duration:.15s!important}#loading i::after{animation:none;width:100%;opacity:.5}}
 /* 解説と目次のパネル */
 dialog{border:none;padding:0;background:var(--paper);color:var(--ink);border-radius:3px;box-shadow:0 10px 50px rgba(0,0,0,.6);max-height:calc(100vh - 48px);max-height:calc(100dvh - 48px)}
 dialog::backdrop{background:rgba(10,9,14,.6)}
@@ -77,8 +88,8 @@ dialog::backdrop{background:rgba(10,9,14,.6)}
 #toclist img{display:block;width:100%;height:auto;aspect-ratio:400/206;object-fit:cover;background:#2a2620}
 #toclist span{display:block;padding:7px 9px 9px;font-size:12px;line-height:1.6;letter-spacing:.05em}
 #toclist small{display:block;color:#6a5a3e;font-size:11px}
+@media (max-width:1000px){#hint{display:none}}
 @media (max-width:640px){
-  #hint{display:none}
   /* 狭い画面: ボタンはアイコンだけ、題名は作品名を省く(下のページ送りに出ている) */
   #tools{top:12px;right:12px;gap:6px}
   #tools .lb{display:none}
@@ -96,15 +107,20 @@ dialog::backdrop{background:rgba(10,9,14,.6)}
 <body>
 <canvas id="c"></canvas>
 <div class="hud" id="title">名画の飛び出す絵本<b>　</b></div>
-<div class="hud" id="hint">◀ ▶ でページをめくる</div>
+<div class="hud" id="hint">◀ ▶ ページ　Shift+◀ ▶ 場面　Space 一時停止</div>
 <div id="tools">
   <button id="toc" aria-label="目次"><svg class="i" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></svg><span class="lb">目次</span></button>
   <button id="info" aria-label="解説"><svg class="i" viewBox="0 0 16 16"><path d="M8 4C6.5 3 4.5 2.6 2 2.8v9.6c2.5-.2 4.5.2 6 1.2 1.5-1 3.5-1.4 6-1.2V2.8C11.5 2.6 9.5 3 8 4zM8 4v9.6"/></svg><span class="lb">解説</span></button>
   <button id="back" aria-label="本にもどる"><svg class="i" viewBox="0 0 16 16"><path d="M6 3L2.5 6.5 6 10"/><path d="M2.5 6.5H10a3.5 3.5 0 010 7H7"/></svg><span class="lb">本にもどる</span></button>
   <button id="pause" aria-label="一時停止"><svg class="i f stop" viewBox="0 0 16 16"><rect x="3.5" y="3" width="3" height="10" rx=".5"/><rect x="9.5" y="3" width="3" height="10" rx=".5"/></svg><svg class="i f play" viewBox="0 0 16 16"><path d="M4.5 2.8v10.4a.5.5 0 00.77.42l8-5.2a.5.5 0 000-.84l-8-5.2a.5.5 0 00-.77.42z"/></svg><span class="lb">一時停止</span></button>
 </div>
-<div class="hud" id="tap">本をタップすると、絵が立ち上がります</div>
-<div id="capbox"><div id="prog" aria-hidden="true"></div><div id="cap" aria-live="polite"></div></div>
+<button id="tap">本をタップすると、絵が立ち上がります</button>
+<div id="capbox"><div id="prog">
+  <button id="sprev" aria-label="前の場面"><svg class="i" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg></button>
+  <span id="dots"></span>
+  <button id="snext" aria-label="次の場面"><svg class="i" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></button>
+  <button id="nextw">次の作品へ<svg class="i" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></button>
+</div><div id="cap" aria-live="polite"></div></div>
 <div id="frame"></div>
 <div id="plate"></div>
 <dialog id="sheet" aria-labelledby="sheet-h"><div class="dlg"><button class="x" aria-label="閉じる"><svg class="i" viewBox="0 0 16 16"><path d="M3 3l10 10M13 3L3 13"/></svg></button><div id="sheet-b"></div></div></dialog>

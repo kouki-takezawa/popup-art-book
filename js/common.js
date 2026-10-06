@@ -46,6 +46,8 @@ function cut(g,path,base,cols,n,len,wid,ang,box){
   if(cols){g.clip();const b=box||[-5,-5,10,10];brush(g,b[0],b[1],b[2],b[3],cols,n,len,wid,ang)}
   g.restore();
 }
+// マウスで操作する端末では「クリック」、それ以外は「タップ」
+const TAP_WORD=matchMedia('(hover:hover) and (pointer:fine)').matches?'クリック':'タップ';
 const FONT='"Yu Mincho","Hiragino Mincho ProN","Noto Serif JP",serif';
 function wrapText(g,text,x,y,maxW,lh){
   let line='';for(const ch of text){if(g.measureText(line+ch).width>maxW){g.fillText(line,x,y);y+=lh;line=ch}else line+=ch}
@@ -123,7 +125,7 @@ function backdrop(B,o){
   lg.textAlign='center';lg.fillStyle='#8a6a2a';lg.font=`52px ${FONT}`;lg.fillText(`第 ${B.no} 話`,0,-200);
   lg.fillStyle='#2b2216';lg.font=`${o.titleSize||150}px ${FONT}`;lg.fillText(o.title,0,0);
   lg.fillStyle='#6a5a3e';lg.font='italic 58px Georgia,serif';lg.fillText(o.orig,0,110);
-  lg.fillStyle='#8a6a2a';lg.font=`46px ${FONT}`;lg.fillText(o.sub||'―　タップすると、絵が立ち上がります　―',0,280);
+  lg.fillStyle='#8a6a2a';lg.font=`46px ${FONT}`;lg.fillText((o.sub||'―　タップすると、絵が立ち上がります　―').replace('タップ',TAP_WORD),0,280);
   for(const x of [-560,560]){lg.fillStyle=o.dot||'#e9b830';lg.beginPath();lg.arc(x,-215,26,0,7);lg.fill();lg.strokeStyle='#b08a3a';lg.lineWidth=3;lg.beginPath();lg.arc(x,-215,42,0,7);lg.stroke()}
   lg.restore();lg.strokeStyle=PAPER;lg.lineWidth=10;lg.stroke(edge);
   const lt=new THREE.CanvasTexture(lc);lt.anisotropy=ANISO;
