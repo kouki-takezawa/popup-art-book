@@ -1,8 +1,8 @@
 // ================= 本の骨組み =================
-// 見開き N 枚。めくれる物(turnables)は N+1 個: 0 = 表紙、1..N-1 = 台紙(厚紙)、N = 裏表紙。
+// 見開き N 枚(0 = 扉、1..N-1 = 作品)。めくれる物(turnables)は N+1 個: 0 = 表紙、1..N-1 = 台紙(厚紙)、N = 裏表紙。
 // それぞれ、右にあるとき上を向く面を「表」、下を向く面を「裏」と呼ぶ。見開き s の左ページ = turnables[s] の裏、右ページ = turnables[s+1] の表。
 // 位置 pos: -1 = 閉じた本(表紙が上)、0..N-1 = 見開き、N = 閉じた本(裏表紙が上)。pos のとき turnables[0..pos] が左にある。
-const N=10;
+const N=11;
 const baseFov=()=>camera.aspect<1?70:50;
 function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.fov=baseFov();camera.updateProjectionMatrix()}
 addEventListener('resize',resize);resize();
@@ -214,6 +214,7 @@ function placeAt(pos){for(const T of turnables){T.phi=T.alpha=T.j<=pos?Math.PI:0
 function descTex(w,num){
   const d=w.desc,S=30,W=PFW*S,H=PFD*S,c=cv(W,H),g=c.getContext('2d');
   paperBase(g,W,H);gutter(g,W,H,false);
+  if(w.left){w.left(g,W,H,S);const t=new THREE.CanvasTexture(c);t.anisotropy=ANISO;return t}
   const L=4*S,MW=W-8*S;let y=5.5*S;
   g.textAlign='left';
   g.fillStyle='#8a6a2a';g.font=`${1.0*S}px ${FONT}`;g.fillText(`第 ${w.no} 話`,L,y);y+=3.2*S;
@@ -238,21 +239,21 @@ function groundTex(w,num){
   paperBase(g,W,H);
   g.save();w.ground(g,W,H,{X:x=>(x+18)/36*W,Z:z=>(z+28)/56*H,S:W/36});g.restore();
   gutter(g,W,H,true);
-  g.fillStyle='#5a4a32';g.textAlign='center';g.font='26px serif';g.fillText(String(num),W-60,H-17);
+  if(num>0){g.fillStyle='#5a4a32';g.textAlign='center';g.font='26px serif';g.fillText(String(num),W-60,H-17)}
   const t=new THREE.CanvasTexture(c);t.anisotropy=ANISO;return t;
 }
 
 // ================= 作品の読み込み(必要になってから script を足す) =================
-const spreads=[...Array(N)].map((_,i)=>({get work(){return BOOK.works[i+1]||null},meta:BOOK.list[i]||null,b:null}));
+const spreads=[...Array(N)].map((_,i)=>({get work(){return BOOK.works[i]||null},meta:BOOK.list[i]||null,b:null}));
 const loadingP={};
 function loadWork(i){
   const e=BOOK.list[i];
-  if(!e||BOOK.works[i+1])return Promise.resolve();
+  if(!e||BOOK.works[i])return Promise.resolve();
   return loadingP[i]||(loadingP[i]=new Promise((ok,ng)=>{
     const sc=document.createElement('script');sc.src=`works/${e.file}.js`;
     const fail=()=>{delete loadingP[i];sc.remove();ng(new Error('作品を読み込めませんでした: '+e.file))};
     // 途中で切れたり中で例外が出たりしても onload は来るので、登録されたかで確かめる
-    sc.onload=()=>BOOK.works[i+1]?ok():fail();sc.onerror=fail;
+    sc.onload=()=>BOOK.works[i]?ok():fail();sc.onerror=fail;
     document.head.appendChild(sc);
   }));
 }
@@ -320,8 +321,8 @@ function popReach(b){
 function build(s){
   const sp=spreads[s];if(!sp||!sp.work||sp.b)return sp&&sp.b;
   const w=sp.work;reseed(w.seed||(s+1)*7919);
-  setPageMat(leftPage(s),pageMat(descTex(w,2*s+1)));
-  setPageMat(rightPage(s),pageMat(groundTex(w,2*s+2),.42));
+  setPageMat(leftPage(s),pageMat(descTex(w,2*s-1)));   // ページ番号は作品の見開きから(扉は付けない)
+  setPageMat(rightPage(s),pageMat(groundTex(w,2*s),.42));
   const root=new THREE.Group();root.visible=false;rightPage(s).g.add(root);
   const b={root,pops:[],extras:[],lights:[],tick:null,live:false,res:null,open:NaN,pe:NaN,pt:PT0,ptA:NaN};
   const B={no:w.no,root,
@@ -488,9 +489,10 @@ function topPose(p=active){
 // ================= 状態 =================
 // phase: top(全体を見ている) / tour(巡回) / move(全体の視点へ戻る) / turn(めくる) / wait(読み込み待ち)
 const qs=new URLSearchParams(location.search);
-let active=qs.has('spread')?clamp((+qs.get('spread')|0)-1,0,N-1):-1;
+let active=qs.has('spread')?clamp(+qs.get('spread')|0,0,N-1):-1;   // ?spread=N は作品 N(0 は扉)
 let target=active,phase='top',tau=0,turnQ=null,paused=false,T=0,afterMove=null,looped=false,settling=false;
 let userCam=false;   // 自分でカメラを動かした(全体の視点やツアーの視点から外れている)
+let syncURL=true;    // めくり終えたら URL(?spread)に入れる(OP の間は入れない。再読み込みでも OP から流れるように)
 placeAt(active);
 let blend=null,tw=null;
 const camLook=V(0,0,0);
@@ -500,10 +502,10 @@ const isSpread=p=>p>=0&&p<N;
 const work=()=>isSpread(active)?spreads[active].work:null,built=()=>isSpread(active)?spreads[active].b:null;
 function updateNav(){
   const m=isSpread(target)&&spreads[target].meta;
-  $('pg').textContent=target<0?'表紙':target>=N?'裏表紙':`見開き ${target+1} / ${N}　${m?m.name:'白紙'}`;
+  $('pg').textContent=target<0?'表紙':target>=N?'裏表紙':target===0?'扉':`見開き ${target} / ${N-1}　${m?m.name:'白紙'}`;
   $('prev').disabled=target<=-1;$('next').disabled=target>=N;
   $('title').querySelector('b').textContent=m?m.name:'　';
-  $('info').disabled=!m;
+  $('info').disabled=!m||!!m.title;
 }
 function updateUI(){
   $('back').style.display=phase==='tour'||(phase==='top'&&userCam)?'flex':'none';
@@ -535,7 +537,7 @@ function turnStep(dt){
   active=q.pos;turnQ=null;
   if(active!==target){startTurn();return}
   phase='top';settling=true;   // 後片付けは tick で、板のばねと部品が落ち着いてから(settle)
-  history.replaceState(null,'',(isSpread(active)?'?spread='+(active+1):location.pathname)+location.hash);
+  if(syncURL)history.replaceState(null,'',(isSpread(active)?'?spread='+active:location.pathname)+location.hash);
   updateUI();
 }
 function settle(){settling=false;showOnly(active);trim();prCap=PR_MAX;prebuild()}
@@ -625,7 +627,7 @@ for(const d of document.querySelectorAll('dialog')){
   d.addEventListener('close',()=>{if(pausedByDlg){pausedByDlg=false;setPaused(false)}});
 }
 function openSheet(retry){
-  if(!isSpread(target))return;
+  if(!isSpread(target)||spreads[target].meta&&spreads[target].meta.title)return;
   const w=spreads[target].work;
   if(!w){if(retry&&spreads[target].meta)loadWork(target).then(()=>openSheet(false),err=>console.error(err));return}
   if($('sheet').open)return;
@@ -636,13 +638,14 @@ function openSheet(retry){
   openDlg($('sheet'));
 }
 $('info').onclick=()=>openSheet(true);
+// 目次は作品だけ(扉は出さない)。サムネイルは thumbs/作品番号.jpg
 $('toclist').innerHTML=spreads.map((sp,i)=>{
-  const m=sp.meta;
-  return `<li><button data-i="${i}"><img src="thumbs/${String(i+1).padStart(2,'0')}.jpg" alt="" loading="lazy" width="400" height="206">`+
-    `<span>${i+1}. ${m?esc(m.name):'白紙'}<small>${m?esc(m.artist):''}</small></span></button></li>`;
+  const m=sp.meta;if(i===0)return '';
+  return `<li><button data-i="${i}"><img src="thumbs/${String(i).padStart(2,'0')}.jpg" alt="" loading="lazy" width="400" height="206">`+
+    `<span>${i}. ${m?esc(m.name):'白紙'}<small>${m?esc(m.artist):''}</small></span></button></li>`;
 }).join('');
 $('toc').onclick=()=>{
-  $('toclist').querySelectorAll('button').forEach((b,i)=>i===target?b.setAttribute('aria-current','true'):b.removeAttribute('aria-current'));
+  $('toclist').querySelectorAll('button').forEach(b=>+b.dataset.i===target?b.setAttribute('aria-current','true'):b.removeAttribute('aria-current'));
   openDlg($('tocd'));
 };
 $('toclist').onclick=e=>{const b=e.target.closest('button');if(!b)return;$('tocd').close();request(+b.dataset.i)};

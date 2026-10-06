@@ -1,5 +1,5 @@
 'use strict';
-// OP 案2 のモック: 扉の見開き(表紙の次)。右ページは紙の劇場。
+// 扉の見開き(表紙の次)。左ページは「はじめに」、右ページは紙の劇場。OP(js/opening.js)で表紙がひとりでに開いて立ち上がる。
 // 幕(背景)→ 額縁の舞台口 → イーゼルの名画3枚 → 題名の帯 → パレットと絵筆、の順に立ち上がる。
 {
 const RED=['#8a1c22','#6e141a','#9c262c','#5a0e14'];
@@ -19,6 +19,13 @@ function goldText(g,s,x,y,font,fill='#7a1e1e'){
 BOOK.add({
 no:0,title:true,name:'扉　名画の飛び出す絵本',seed:20261006,
 desc:{orig:'',artist:'',medium:'',paras:[]},
+left(g,W,H,S){
+  g.textAlign='center';g.fillStyle='#8a6a2a';g.font=`${1.1*S}px ${FONT}`;g.fillText('は じ め に',W/2,14*S);
+  g.strokeStyle='#b8a47a';g.lineWidth=.06*S;g.beginPath();g.moveTo(W/2-5*S,15.6*S);g.lineTo(W/2+5*S,15.6*S);g.stroke();
+  g.fillStyle='#3a2e1e';g.font=`${1.1*S}px ${FONT}`;
+  ['この本には、西洋の名画が十枚、','紙の立体になって綴じられています。','','ページをめくり、絵を'+TAP_WORD+'すると、','絵が立ち上がり、','近くをめぐって案内します。','','どうぞ、ごゆっくり。'].forEach((s,i)=>g.fillText(s,W/2,(20+i*2.1)*S));
+  g.fillStyle='#c9a24a';for(const x of [-2,0,2]){g.beginPath();g.arc(W/2+x*S,40*S,.22*S,0,7);g.fill()}
+},
 ground(g,W,H,{X,Z,S}){
   groundClip(g,X,Z,1.2,()=>{
     // 奥は舞台の床板、手前は赤い絨毯

@@ -2,9 +2,10 @@
 // 作品ファイル(works/NN_名前.js)は BOOK.add({...}) で登録するだけ。組み立ては見開きを開くときに行う。
 //
 // BOOK.add の中身:
-//   no            見開き番号(1〜10)            name   題名(ページ送りに出る)
+//   no            見開き番号(0 = 扉、1〜10 = 作品)   name   題名(ページ送りに出る)
 //   seed          乱数の種(作品ごとに固定)
 //   desc          左ページの解説 {orig, artist, medium, paras:[], points:[], foot}
+//   left(g,W,H,S) 左ページを自分で描く(扉の「はじめに」など。あれば desc の代わりに使う)
 //   plate         額縁の場面で出す題箋(HTML可)
 //   ground(g,W,H,{X,Z,S})  右ページの地面を描く。X(x),Z(z) でページ座標→画素、S=1単位の画素数
 //   build(B)      飛び出し部品を作る。戻り値 {tick(T,dt)} は開いている間だけ毎フレーム呼ばれる
@@ -162,8 +163,9 @@ function gutter(g,W,H,spineLeft){
 }
 
 const BOOK={works:{},add(w){this.works[w.no]=w},
-  // 見開きの順に、作品ファイル名・題名・画家
+  // 見開きの順に、作品ファイル名・題名・画家(0 番は扉。目次には出さない)
   list:[
+    {file:'00_title',name:'扉',artist:'',title:true},
     {file:'01_grande_jatte',name:'グランド・ジャット島の日曜日の午後',artist:'ジョルジュ・スーラ　1884〜1886年'},
     {file:'02_moulin_galette',name:'ムーラン・ド・ラ・ギャレットの舞踏会',artist:'ピエール＝オーギュスト・ルノワール　1876年'},
     {file:'03_japanese_bridge',name:'睡蓮の池と日本の橋',artist:'クロード・モネ　1899年'},
