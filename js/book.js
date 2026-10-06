@@ -291,7 +291,17 @@ function applyOpen(b,open){
   return ch;
 }
 // 開いている見開きを、ツアーが始まったら立ち上げる。途中で全体に戻っても最後まで立ち上げる(一時停止中は止まる。動きを減らす設定では2倍の速さ)
-function risePops(dt){const b=built();if(b&&b.pt<PT1&&(phase==='tour'||b.pt>PT0))b.pt=Math.min(PT1,b.pt+dt*(REDUCED.matches?2:1))}
+function risePops(dt){const b=built();if(!folding&&b&&b.pt<PT1&&(phase==='tour'||b.pt>PT0))b.pt=Math.min(PT1,b.pt+dt*(REDUCED.matches?2:1))}
+// ページを移る前に、開いている見開きの絵を畳む(立ち上がりを逆にたどる。約1.5秒、動きを減らす設定では約0.6秒)。畳み終えたら解決する
+let folding=null;
+function foldPops(){
+  const b=built();if(!b||b.pt<=PT0)return Promise.resolve();
+  return new Promise(ok=>{folding={b,ok}});
+}
+function foldStep(dt){
+  const f=folding;f.b.pt=Math.max(PT0,f.b.pt-dt*(PT1-PT0)/(REDUCED.matches?.6:1.5));
+  if(f.b.pt<=PT0){folding=null;f.ok()}
+}
 const openOf=s=>clamp(turnables[s].alpha-turnables[s+1].alpha,0,Math.PI);
 let debugOpen=null;   // 確認用 ?open=度
 function updatePops(){
@@ -547,10 +557,12 @@ function settle(){settling=false;showOnly(active);trim();prCap=PR_MAX;prebuild()
 function request(i){
   if(i<-1||i>N||i===active||(phase!=='top'&&phase!=='tour'))return;
   target=i;updateNav();idleTok++;
+  // 絵を畳みながら(ツアー中ならカメラが戻る間も)めくる先を読み込み、両方そろってからめくる
+  const folded=foldPops();
   const go=()=>{
     phase='wait';updateUI();
     const need=isSpread(i)?loadWork(i).then(()=>build(i)):Promise.resolve();
-    need.then(()=>{startTurn();updateUI()}).catch(err=>{
+    Promise.all([need,folded]).then(()=>{startTurn();updateUI()}).catch(err=>{
       console.error(err);target=active;updateNav();phase='top';updateUI();prebuild();
     });
   };
@@ -771,7 +783,7 @@ function tick(now){
   // 本: めくっている間とばねが落ち着くまで置き直す。飛び出しは開き具合が変わった見開きだけ当て直す
   const bookMoved=stepSprings(mdt)||phase==='turn';
   if(bookMoved)layout();
-  risePops(dt);
+  if(folding)foldStep(mdt);else risePops(dt);
   const popsMoved=updatePops();
   if(settling&&phase==='top'&&!bookMoved&&!popsMoved)settle();
   const b=built();
