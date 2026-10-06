@@ -28,7 +28,9 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const easeOutBack=k=>{const c1=1.4,c3=c1+1;return k<=0?0:k>=1?1:1+c3*Math.pow(k-1,3)+c1*Math.pow(k-1,2)};
 const easeIO=k=>(k=clamp(k,0,1),k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2);
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
-function cv(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c}
+// テクスチャ用の canvas は CPU で描く(GPU で描かせると、何千本もの筆致で Edge の GPU プロセスが1分以上詰まり、ブラウザ全体が重くなる)。
+// 2d の設定は最初の getContext で決まるので、ここで先に取っておく
+function cv(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d',{willReadFrequently:true});return c}
 function brush(g,x0,y0,w,h,cols,n,len,wid,ang,o={}){
   g.save();g.lineCap='round';
   const jit=o.jit??.6,bk=o.bend??.3,al=o.alpha??.9;
