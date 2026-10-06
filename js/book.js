@@ -223,7 +223,8 @@ function tick(now){
   if(Math.abs(camera.fov-fovT)>.01){camera.fov+=(fovT-camera.fov)*(paused?1:Math.min(1,dt*1.6));camera.updateProjectionMatrix()}
   camera.lookAt(camLook);
   if(phase==='tour')setCap(tau>1.5?shot.s.cap||null:null);
-  const fr=phase==='tour'&&shot&&shot.s.frame&&shot.u>.12&&shot.u<.94;
+  // 真偽値にそろえる(undefined を toggle に渡すと毎フレーム付け外しが反転して、字幕などが上下にぶれる)
+  const fr=!!(phase==='tour'&&shot&&shot.s.frame&&shot.u>.12&&shot.u<.94);
   $('frame').style.opacity=fr?1:0;$('plate').style.opacity=fr?1:0;document.body.classList.toggle('framed',fr);
   renderer.render(scene,camera);
   requestAnimationFrame(tick);
