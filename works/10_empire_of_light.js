@@ -37,7 +37,7 @@ build(B){
 const root=B.root;
 // ================= 昼の空(背景板)と雲 =================
 const bd=backdrop(B,{title:'光の帝国',titleSize:170,orig:"L'Empire des lumières",dot:'#6a9ad8',emi:.9,delay:1.0,shadow:false,
-  sub:'―　タップすると、夜と昼が立ち上がります　―',
+  sub:'―　ページを開くと、夜と昼が立ち上がります　―',
   edge:(p,W,H)=>{p.moveTo(0,H);p.lineTo(W,H);p.lineTo(W,70);p.lineTo(0,70);p.closePath()},
   draw:(g,W,H)=>{
     const gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#4a86c8');gr.addColorStop(.6,'#8ab8e0');gr.addColorStop(1,'#c8dcec');g.fillStyle=gr;g.fillRect(0,0,W,H);

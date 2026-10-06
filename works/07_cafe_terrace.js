@@ -226,7 +226,7 @@ const stars=[];
   lg.textAlign='center';lg.fillStyle='#8a6a2a';lg.font=`52px ${FONT}`;lg.fillText(`第 ${B.no} 話`,0,-200);
   lg.fillStyle='#2b2216';lg.font=`150px ${FONT}`;lg.fillText('夜のカフェテラス',0,0);
   lg.fillStyle='#6a5a3e';lg.font='italic 58px Georgia,serif';lg.fillText('Terrasse du café le soir',0,110);
-  lg.fillStyle='#8a6a2a';lg.font=`46px ${FONT}`;lg.fillText('―　タップすると、街が立ち上がります　―'.replace('タップ',TAP_WORD),0,280);
+  lg.fillStyle='#8a6a2a';lg.font=`46px ${FONT}`;lg.fillText('―　ページを開くと、街が立ち上がります　―',0,280);
   for(const x of [-560,560]){lg.fillStyle='#e9b830';lg.beginPath();lg.arc(x,-215,26,0,7);lg.fill();lg.strokeStyle='#b08a3a';lg.lineWidth=3;lg.beginPath();lg.arc(x,-215,42,0,7);lg.stroke()}
   lg.restore();lg.strokeStyle=PAPER;lg.lineWidth=10;lg.stroke(edge);
   const lt=new THREE.CanvasTexture(lc);lt.anisotropy=ANISO;
