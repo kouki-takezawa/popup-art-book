@@ -129,11 +129,11 @@ function tourPose(w,t){
   let [p,l]=s.f(clamp((t-s.t0)/(s.t1-s.t0),0,1));
   if(i>0&&t-s.t0<BL){const [pp,pl]=TOUR[i-1].f(1),k=easeIO((t-s.t0)/BL);p=pp.lerp(p,k);l=pl.lerp(l,k)}
   const g=rightPage(active).g;g.updateMatrixWorld(true);
-  return {p:g.localToWorld(p),l:g.localToWorld(l),s,u:(t-s.t0)/(s.t1-s.t0)};
+  return {p:g.localToWorld(p),l:g.localToWorld(l),s,i,u:(t-s.t0)/(s.t1-s.t0)};
 }
 // 真上から見開き全体
 function topPose(){
-  const f=Math.tan(baseFov()*Math.PI/360)*2,h=Math.max(DP*1.3/f,(2*WP+3)*1.12/(f*camera.aspect));
+  const f=Math.tan(baseFov()*Math.PI/360)*2,h=Math.max(DP*1.42/f,(2*WP+3)*1.12/(f*camera.aspect));
   return {p:V(0,h,.6),l:V(0,0,0)};
 }
 
@@ -143,7 +143,6 @@ const qs=new URLSearchParams(location.search);
 let active=qs.has('spread')?clamp((+qs.get('spread')|0)-1,0,N-1):Math.max(0,spreads.findIndex(sp=>sp.work));
 let target=active,phase='top',tau=0,pc=0,flip=null,paused=false,T=0,afterFold=null;
 for(let k=0;k<N-1;k++)setLeaf(k,k<active?Math.PI:0);
-build(active);showOnly(active);
 let camFrom=null,tw=null;
 const camLook=V(0,0,0);
 {const t=topPose();camera.position.copy(t.p);camLook.copy(t.l);camera.lookAt(camLook)}
@@ -155,10 +154,12 @@ function updateNav(){
   $('prev').disabled=target<=0;$('next').disabled=target>=N-1;
   $('title').querySelector('b').textContent=w?w.name:'　';
   $('plate').innerHTML=w&&w.plate||'';
+  $('info').disabled=!w;
 }
 function updateUI(){
   $('back').style.display=phase==='tour'?'block':'none';
   $('tap').style.opacity=phase==='top'&&built()?1:0;
+  $('prog').style.opacity=phase==='tour'?1:0;
 }
 function tweenTo(pose,dur){tw={fp:camera.position.clone(),fl:camLook.clone(),tp:pose.p,tl:pose.l,t:0,dur}}
 function foldThen(next){setCap(null);phase='fold';afterFold=next;tweenTo(topPose(),2);updateUI()}
@@ -172,11 +173,41 @@ function request(i){
   const go=()=>{startFlip();updateUI()};
   if(phase==='tour')foldThen(go);else go();
 }
-function rise(){if(phase!=='top'||!built())return;phase='tour';tau=0;camFrom={p:camera.position.clone(),l:camLook.clone()};updateUI()}
+function rise(){if(phase!=='top'||!built())return;phase='tour';tau=0;camFrom={p:camera.position.clone(),l:camLook.clone()};makeProg();fitCap();updateUI()}
 $('prev').onclick=()=>request(active-1);$('next').onclick=()=>request(active+1);
 $('back').onclick=()=>{if(phase==='tour')foldThen(()=>{phase='top';updateUI()})};
-addEventListener('keydown',e=>{if(e.key==='ArrowRight')request(active+1);if(e.key==='ArrowLeft')request(active-1)});
-$('pause').onclick=e=>{paused=!paused;e.target.textContent=paused?'▶ 再生':'❚❚ 一時停止'};
+addEventListener('keydown',e=>{if(document.querySelector('dialog[open]'))return;if(e.key==='ArrowRight')request(active+1);if(e.key==='ArrowLeft')request(active-1)});
+function setPaused(v){
+  paused=v;const b=$('pause'),l=v?'再生':'一時停止';
+  b.classList.toggle('paused',v);b.setAttribute('aria-label',l);b.querySelector('.lb').textContent=l;
+}
+$('pause').onclick=()=>setPaused(!paused);
+// 解説と目次のパネル(開いている間はツアーを止める)
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let pausedByDlg=false;
+function openDlg(d){if(!paused&&phase==='tour'){setPaused(true);pausedByDlg=true}d.showModal()}
+for(const d of document.querySelectorAll('dialog')){
+  d.querySelector('.x').onclick=()=>d.close();
+  d.addEventListener('click',e=>{if(e.target===d)d.close()});
+  d.addEventListener('close',()=>{if(pausedByDlg){pausedByDlg=false;setPaused(false)}});
+}
+$('info').onclick=()=>{
+  const w=spreads[target].work;if(!w)return;const d=w.desc;
+  $('sheet-b').innerHTML=`<div class="no">第 ${w.no} 話</div><h2 id="sheet-h">${esc(w.name)}</h2><div class="orig">${esc(d.orig)}</div>`+
+    `<div class="meta">${esc(d.artist)}<small>${esc(d.medium)}</small></div>${d.paras.map(t=>`<p>${esc(t)}</p>`).join('')}`+
+    (d.points?`<h3>見どころ</h3><ul>${d.points.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:'');
+  openDlg($('sheet'));
+};
+$('toclist').innerHTML=spreads.map((sp,i)=>{
+  const w=sp.work;
+  return `<li><button data-i="${i}"><img src="thumbs/${String(i+1).padStart(2,'0')}.jpg" alt="" loading="lazy" width="400" height="206">`+
+    `<span>${i+1}. ${w?esc(w.name):'白紙'}<small>${w?esc(w.desc.artist):''}</small></span></button></li>`;
+}).join('');
+$('toc').onclick=()=>{
+  $('toclist').querySelectorAll('button').forEach((b,i)=>i===target?b.setAttribute('aria-current','true'):b.removeAttribute('aria-current'));
+  openDlg($('tocd'));
+};
+$('toclist').onclick=e=>{const b=e.target.closest('button');if(!b)return;$('tocd').close();request(+b.dataset.i)};
 // 本をタップすると立ち上がる
 const ray=new THREE.Raycaster(),ndc=new THREE.Vector2(),hitP=new THREE.Vector3();
 let down=null;
@@ -190,8 +221,18 @@ renderer.domElement.addEventListener('pointerup',e=>{
 
 const capEl=$('cap');let capNow=null;
 function setCap(k){if(k===capNow)return;capNow=k;if(k){capEl.textContent=work().caps[k];capEl.style.opacity=1}else capEl.style.opacity=0}
+// 字幕の高さをその作品でいちばん長い字幕に合わせる(描画の前に測って戻すので、ちらつかない)
+function fitCap(){
+  const w=work();if(!w)return;const keep=capEl.textContent;let h=0;capEl.style.minHeight='0';
+  for(const k in w.caps){capEl.textContent=w.caps[k];h=Math.max(h,capEl.offsetHeight)}
+  capEl.textContent=keep;capEl.style.minHeight=h+'px';
+}
+// ツアーの進み具合(場面ごとの点)
+const progEl=$('prog');let progN=-1;
+function makeProg(){progEl.innerHTML=work().tour.map(()=>'<i></i>').join('');progN=-1}
+function setProg(i){if(i===progN)return;progN=i;[...progEl.children].forEach((d,j)=>d.className=j<i?'done':j===i?'on':'')}
 updateNav();updateUI();
-addEventListener('resize',()=>{if(phase==='top'&&!tw){const t=topPose();camera.position.copy(t.p);camLook.copy(t.l)}});
+addEventListener('resize',()=>{fitCap();if(phase==='top'&&!tw){const t=topPose();camera.position.copy(t.p);camLook.copy(t.l)}});
 
 let last=performance.now();
 function tick(now){
@@ -222,18 +263,24 @@ function tick(now){
   const fovT=phase==='tour'&&shot&&shot.s.fov?shot.s.fov*(camera.aspect<1?1.45:1):baseFov();
   if(Math.abs(camera.fov-fovT)>.01){camera.fov+=(fovT-camera.fov)*(paused?1:Math.min(1,dt*1.6));camera.updateProjectionMatrix()}
   camera.lookAt(camLook);
-  if(phase==='tour')setCap(tau>1.5?shot.s.cap||null:null);
+  if(phase==='tour'){setCap(tau>1.5?shot.s.cap||null:null);setProg(shot.i)}
   // 真偽値にそろえる(undefined を toggle に渡すと毎フレーム付け外しが反転して、字幕などが上下にぶれる)
   const fr=!!(phase==='tour'&&shot&&shot.s.frame&&shot.u>.12&&shot.u<.94);
   $('frame').style.opacity=fr?1:0;$('plate').style.opacity=fr?1:0;document.body.classList.toggle('framed',fr);
   renderer.render(scene,camera);
   requestAnimationFrame(tick);
 }
-// 確認用: ?spread=N 見開きN / ?t=秒 ツアーのその時点で停止 / ?pc=秒 立ち上がり途中で真上から / ?flip=0..1 次へめくる途中 / ?view=x,y,z / ?auto=rise|back
-if(qs.has('flip')&&active<N-1){target=active+1;updateNav();startFlip(+qs.get('flip'));paused=true;setLeaf(flip.k,Math.PI*easeIO(flip.t))}
-if(qs.has('pc')){pc=+qs.get('pc');paused=true}
-if(qs.has('view')){const [x,y,z]=qs.get('view').split(',').map(Number);tw={fp:V(x,y,z),fl:V(0,0,-2),tp:V(x,y,z),tl:V(0,0,-2),t:0,dur:1e9}}
-if(qs.get('auto')==='rise')setTimeout(rise,300);
-if(qs.get('auto')==='back')setTimeout(()=>{rise();setTimeout(()=>$('back').click(),2500)},300);
-if(qs.has('t')&&built()){phase='tour';tau=+qs.get('t');pc=4.6;camFrom=topPose();paused=true;updateUI()}
-requestAnimationFrame(tick);
+// 最初の見開きは読み込み中の表示を一度描かせてから組み立てる(組み立ての間、画面が真っ暗にならないように)
+function boot(){
+  build(active);showOnly(active);updateUI();
+  // 確認用: ?spread=N 見開きN / ?t=秒 ツアーのその時点で停止 / ?pc=秒 立ち上がり途中で真上から / ?flip=0..1 次へめくる途中 / ?view=x,y,z / ?auto=rise|back
+  if(qs.has('flip')&&active<N-1){target=active+1;updateNav();startFlip(+qs.get('flip'));setPaused(true);setLeaf(flip.k,Math.PI*easeIO(flip.t))}
+  if(qs.has('pc')){pc=+qs.get('pc');setPaused(true)}
+  if(qs.has('view')){const [x,y,z]=qs.get('view').split(',').map(Number);tw={fp:V(x,y,z),fl:V(0,0,-2),tp:V(x,y,z),tl:V(0,0,-2),t:0,dur:1e9}}
+  if(qs.get('auto')==='rise')setTimeout(rise,300);
+  if(qs.get('auto')==='back')setTimeout(()=>{rise();setTimeout(()=>$('back').click(),2500)},300);
+  if(qs.has('t')&&built()){phase='tour';tau=+qs.get('t');pc=4.6;camFrom=topPose();setPaused(true);makeProg();fitCap();updateUI()}
+  last=performance.now();requestAnimationFrame(tick);
+  requestAnimationFrame(()=>$('loading').classList.add('done'));
+}
+requestAnimationFrame(()=>setTimeout(boot,30));
