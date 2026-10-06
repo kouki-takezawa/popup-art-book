@@ -132,7 +132,79 @@ function build(s){
     extra(delay,dur,f){b.extras.push({delay,dur,f})},
     light(l){l.visible=false;scene.add(l);b.lights.push(l);return l}};
   const r=w.build(B)||{};b.tick=r.tick;b.live=!!r.liveShadows;
+  mergeStatic(b);
   applyPops(b,0);b.res=collect(b,s);track(b.res.texs);sp.b=b;return b;
+}
+// ================= 描画命令を減らす =================
+// 動かない部品を、同じ立ち上がりの群(B.pop)の中で、同じマテリアルどうし1つの形にまとめる。
+// 動く物 = 自分か祖先に userData.live があるもの、または試しに立ち上がり・extra・tick を動かして位置・向き・大きさが変わったもの
+function liveSet(b){
+  const objs=[];b.root.traverse(o=>objs.push(o));
+  const snap=()=>objs.map(o=>[...o.position.toArray(),...o.quaternion.toArray(),...o.scale.toArray()].join());
+  const before=snap();
+  for(const pt of [0,1.5,2.5,3,3.5,4,5,6])applyPops(b,pt);
+  if(b.tick){b.root.updateMatrixWorld(true);for(const T of [0,1.3,7.7,31])b.tick(T,.016)}
+  const after=snap(),live=new Set();
+  objs.forEach((o,i)=>{if(before[i]!==after[i]||o.userData.live)live.add(o)});
+  return live;
+}
+function mergeStatic(b){
+  const live=liveSet(b),domains=new Set([b.root,...b.pops.map(q=>q.g)]),groups=new Map();
+  const plainOBR=THREE.Object3D.prototype.onBeforeRender;
+  b.root.traverse(o=>{
+    if(!o.isMesh||o.isInstancedMesh||o.isSkinnedMesh||o.children.length||!o.visible||Array.isArray(o.material)||o.onBeforeRender!==plainOBR)return;
+    const g=o.geometry,at=g.attributes;
+    if(!at.position||g.drawRange.start!==0||g.drawRange.count!==Infinity||Object.keys(g.morphAttributes).length)return;
+    if(Object.values(at).some(a=>a.isInterleavedBufferAttribute||!(a.array instanceof Float32Array)))return;
+    // 群までたどる。途中に動く物があれば外す
+    let dom=null;
+    for(let p=o;p;p=p.parent){if(live.has(p))return;if(p!==o&&domains.has(p)){dom=p;break}}
+    if(!dom)return;
+    const dm=o.customDepthMaterial;
+    const key=[o.material.uuid,o.castShadow,o.receiveShadow,o.renderOrder,o.frustumCulled,Object.keys(at).sort().join(),dm?`${dm.map&&dm.map.uuid}:${dm.alphaTest}`:'-'].join('|');
+    if(!groups.has(dom))groups.set(dom,new Map());
+    const m=groups.get(dom);if(!m.has(key))m.set(key,[]);m.get(key).push(o);
+  });
+  for(const [dom,m] of groups)for(const list of m.values()){
+    if(list.length<2)continue;
+    const src=list[0],mesh=new THREE.Mesh(mergeGeos(list,dom),src.material);
+    mesh.castShadow=src.castShadow;mesh.receiveShadow=src.receiveShadow;mesh.renderOrder=src.renderOrder;mesh.frustumCulled=src.frustumCulled;
+    if(src.customDepthMaterial)mesh.customDepthMaterial=src.customDepthMaterial;
+    for(const o of list)o.parent.remove(o);
+    dom.add(mesh);
+  }
+}
+// 群から見た位置に直して1つの BufferGeometry にする(鏡に映した部品は三角形の向きを裏返す)
+function mergeGeos(list,dom){
+  const names=Object.keys(list[0].geometry.attributes);
+  let nv=0,ni=0;
+  for(const o of list){const g=o.geometry,c=g.attributes.position.count;nv+=c;ni+=g.index?g.index.count:c}
+  const out={};for(const n of names){const a=list[0].geometry.attributes[n];out[n]=new THREE.BufferAttribute(new Float32Array(nv*a.itemSize),a.itemSize,a.normalized)}
+  const idx=new (nv>65535?Uint32Array:Uint16Array)(ni);
+  const M=new THREE.Matrix4(),NM=new THREE.Matrix3(),v=new THREE.Vector3();
+  let vo=0,io=0;
+  for(const o of list){
+    M.identity();for(let p=o;p!==dom;p=p.parent){if(p.matrixAutoUpdate)p.updateMatrix();M.premultiply(p.matrix)}
+    NM.getNormalMatrix(M);const flip=M.determinant()<0,g=o.geometry,cnt=g.attributes.position.count;
+    for(const n of names){
+      const a=g.attributes[n],d=out[n],s=a.itemSize;
+      for(let i=0;i<cnt;i++){
+        if(n==='position'){v.fromBufferAttribute(a,i).applyMatrix4(M);d.setXYZ(vo+i,v.x,v.y,v.z)}
+        else if(n==='normal'){v.fromBufferAttribute(a,i).applyMatrix3(NM).normalize();d.setXYZ(vo+i,v.x,v.y,v.z)}
+        else for(let k=0;k<s;k++)d.array[(vo+i)*s+k]=a.array[i*s+k];
+      }
+    }
+    const src=g.index&&g.index.array,n=src?src.length:cnt;
+    for(let i=0;i+2<n;i+=3){
+      const a0=src?src[i]:i,a1=src?src[i+1]:i+1,a2=src?src[i+2]:i+2;
+      idx[io++]=vo+a0;if(flip){idx[io++]=vo+a2;idx[io++]=vo+a1}else{idx[io++]=vo+a1;idx[io++]=vo+a2}
+    }
+    vo+=cnt;
+  }
+  const geo=new THREE.BufferGeometry();
+  for(const n of names)geo.setAttribute(n,out[n]);
+  geo.setIndex(new THREE.BufferAttribute(io<idx.length?idx.slice(0,io):idx,1));geo.computeBoundingSphere();
+  return geo;
 }
 // 見開きどうしで使い回している物は捨てない
 const SHARED=new Set([PAGE_GEO,BLANK_L,BLANK_R,BLANK_L.map,BLANK_R.map,TAB_M]);

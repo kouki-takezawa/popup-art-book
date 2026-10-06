@@ -55,7 +55,7 @@ const cloudT=[0,1,2].map(()=>tex(8,3.4,g=>{
 const clouds=[];
 [[-11,19,1.1],[-2,21.5,1.3],[8,19.5,1],[13,22,.8],[-7,15.5,.8],[4,15.2,.7]].forEach(([x,y,s],i)=>{
   const zb=bd.zAt(x),off=1.5+R()*2.5,t=cloudT[i%3],m=plane(8,3.4,mat(t,.9,true),t);m.scale.setScalar(s);m.position.set(x,y,zb+off);bd.pg.add(m);
-  tab(bd.pg,[x,y-.4,zb],[x,y-.4,zb+off],.1);clouds.push({m,x,ph:R()*6});
+  tab(bd.pg,[x,y-.4,zb],[x,y-.4,zb+off],.1);m.userData.live=true;clouds.push({m,x,ph:R()*6});
   B.extra(1.9+i*.05,.7,e=>m.scale.setScalar(Math.max(.001,e)*s));
 });
 // ================= 木立(夜の黒いシルエット) =================

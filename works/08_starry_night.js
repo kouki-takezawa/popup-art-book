@@ -71,16 +71,16 @@ const stars=[];
   const list=[[-13,20.5,2.6],[-8,22.5,2.2],[-2,21.5,2.4],[3,22.8,1.8],[8.5,20,2],[-15.5,15.2,2.4],[-6,16.5,1.8],[11,16,1.9],[-10.5,13.4,3.2],[1,15,1.6],[6,13,1.5]];
   list.forEach(([x,y,s],i)=>{
     const pg=bd.pg,zb=bd.zAt(x),off=1+R()*2,t=pick(tx),m=plane(s,s,mat(t,.55,true),t);m.position.set(x,y,zb+off);pg.add(m);
-    tab(pg,[x,y-.3,zb],[x,y-.3,zb+off],.1);m.userData={ph:R()*6};stars.push(m);
+    tab(pg,[x,y-.3,zb],[x,y-.3,zb+off],.1);m.userData={ph:R()*6,live:true};stars.push(m);
     B.extra(2.0+i*.05,.7,e=>m.scale.setScalar(Math.max(.001,e)));
   });
-  const mx=13.5,my=20.5,mz=bd.zAt(mx)+2.2,moon=plane(3.6,3.6,mat(moonT,.65,true),moonT);moon.position.set(mx,my,mz);bd.pg.add(moon);tab(bd.pg,[mx,my-.3,bd.zAt(mx)],[mx,my-.3,mz],.12);
+  const mx=13.5,my=20.5,mz=bd.zAt(mx)+2.2,moon=plane(3.6,3.6,mat(moonT,.65,true),moonT);moon.position.set(mx,my,mz);moon.userData.live=true;bd.pg.add(moon);tab(bd.pg,[mx,my-.3,bd.zAt(mx)],[mx,my-.3,mz],.12);
   B.extra(2.4,.8,e=>moon.scale.setScalar(Math.max(.001,e)));
   // 渦: 渦巻きの帯を切り抜いて二つ浮かせる
   const sw=tex(8,8,g=>{g.translate(4,4);g.lineCap='round';
     for(const [w,c] of [[.62,PAPER],[.5,'#a8c8e8'],[.3,'#e8f0c8'],[.12,'#ffffff']]){g.strokeStyle=c;g.lineWidth=w;g.beginPath();for(let a=0;a<14;a+=.05){const r=.25+a*.26;const x=Math.cos(a)*r,y=Math.sin(a)*r*.62;a?g.lineTo(x,y):g.moveTo(x,y)}g.stroke()}
     brush(g,-4,-4,8,8,SWIRL,500,.3,.06,(x,y)=>Math.atan2(y,x)+Math.PI/2,{alpha:.5})},{ppu:100});
-  for(const [x,y,s,o] of [[-1.5,18,9,2.6],[4.5,16,5,3.4]]){const z=bd.zAt(x)+o,m=plane(s,s,mat(sw,.62,true),sw);m.position.set(x,y,z);bd.pg.add(m);tab(bd.pg,[x,y,bd.zAt(x)],[x,y,z],.12);stars.push(m);m.userData={ph:R()*6,swirl:1}}
+  for(const [x,y,s,o] of [[-1.5,18,9,2.6],[4.5,16,5,3.4]]){const z=bd.zAt(x)+o,m=plane(s,s,mat(sw,.62,true),sw);m.position.set(x,y,z);bd.pg.add(m);tab(bd.pg,[x,y,bd.zAt(x)],[x,y,z],.12);stars.push(m);m.userData={ph:R()*6,swirl:1,live:true}}
 }
 // ================= 山並み =================
 function hill(z,h,base,dl,layer){

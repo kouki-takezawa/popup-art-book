@@ -146,7 +146,7 @@ let lantern,lampOn=0;
     for(const q of L.wins)glass(g,q.x,q.y,q.w,q.h,q.lit);for(const q of L.shops)opening(g,q.x,q.y,q.w,q.h,q.lit);
     g.strokeStyle=PAPER;g.lineWidth=.14;g.strokeRect(-w/2,0,w,h);
   }});
-  const awn=new THREE.Group();awn.position.set(0,4.75,0);o.add(awn);
+  const awn=new THREE.Group();awn.userData.live=true;awn.position.set(0,4.75,0);o.add(awn);
   const x0=-W/2-.6,x1=W/2+.2,out=4.8,drop=1.15;
   const at=tex(20,4.8,(g,w,h)=>{g.fillStyle='#f3b324';g.fillRect(0,0,w,h);brush(g,0,0,w,h,AWN,2600,.4,.12,Math.PI/2,{jit:.5});
     g.strokeStyle='rgba(190,110,20,.55)';g.lineWidth=.06;for(let x=.5;x<w;x+=.95){g.beginPath();g.moveTo(x,0);g.lineTo(x+.08,h);g.stroke()}});
@@ -239,7 +239,7 @@ const stars=[];
     const zb=CZ-Math.sqrt(RAD*RAD-x*x),off=.8+R()*2.2;
     const t=pick(tx),m=plane(s,s,mat(t,.32,true),t);m.position.set(x,y,zb+off);pg.add(m);
     const tab=box(.12,.12,off,SILL_M);tab.position.set(x,y-.2,zb+off/2);pg.add(tab);
-    m.userData={ph:R()*6,sp:(R()-.5)*.4};stars.push(m);
+    m.userData={ph:R()*6,sp:(R()-.5)*.4,live:true};stars.push(m);
     extra.push({delay:2.1+i*.05,dur:.7,f:e=>m.scale.setScalar(Math.max(.001,e))});
   });
 }
